@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<widget id="tn.educanet.trackingbus" version="1.0.0"
+        xmlns="http://www.w3.org/ns/widgets"
+        xmlns:cdv="http://cordova.apache.org/ns/1.0">
+    <name>Tracking Bus</name>
+    <description>Application hybride de suivi des bus scolaires en temps réel.</description>
+    <author email="contact@educanet.tn">EDUCANET</author>
+    <content src="index.html" />
+    <access origin="*" />
+    <allow-navigation href="http://localhost:*/*" />
+    <allow-navigation href="https://*/*" />
+    <allow-intent href="http://*/*" />
+    <allow-intent href="https://*/*" />
+    <allow-intent href="tel:*" />
+    <allow-intent href="sms:*" />
+    <allow-intent href="mailto:*" />
+    <preference name="DisallowOverscroll" value="true" />
+    <preference name="Orientation" value="portrait" />
+    <preference name="Fullscreen" value="false" />
+    <preference name="StatusBarOverlaysWebView" value="false" />
+    <preference name="StatusBarBackgroundColor" value="#A8C2FF" />
+    <preference name="StatusBarStyle" value="default" />
+    <preference name="AndroidLaunchMode" value="singleTop" />
+    <preference name="AndroidXEnabled" value="true" />
+    <preference name="SplashScreenBackgroundColor" value="#FFFFFF" />
+    <platform name="android">
+        <icon density="mdpi" src="www/assets/icons/icon-192.png" />
+        <icon density="xxxhdpi" src="www/assets/icons/icon-512.png" />
+    </platform>
+    <plugin name="cordova-plugin-statusbar" spec="^3.0.0" />
+    <plugin name="cordova-plugin-vibration" spec="^3.1.1" />
+    <plugin name="cordova-plugin-geolocation" spec="^5.0.0" />
+</widget>

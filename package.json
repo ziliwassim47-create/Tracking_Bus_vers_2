@@ -1,0 +1,24 @@
+{
+  "name": "tracking-bus-hybride",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Application autonome Tracking Bus en HTML/CSS/JavaScript, compatible navigateur et Cordova.",
+  "scripts": {
+    "start": "node server.js",
+    "serve": "node server.js",
+    "db:init": "node database.js --init",
+    "db:reset": "node database.js --reset",
+    "test": "node --test",
+    "android:add": "cordova platform add android",
+    "android:build": "cordova build android",
+    "android:run": "cordova run android"
+  },
+  "cordova": {
+    "platforms": [],
+    "plugins": {
+      "cordova-plugin-statusbar": {},
+      "cordova-plugin-vibration": {},
+      "cordova-plugin-geolocation": {}
+    }
+  }
+}

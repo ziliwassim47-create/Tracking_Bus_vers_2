@@ -1,0 +1,629 @@
+RÔLE DES FICHIERS DU PROJET TRACKING BUS
+=========================================
+
+Date de l'inventaire : 28 juillet 2026
+
+Ce document décrit tous les fichiers propres au projet. Les 1 727 fichiers
+internes de node_modules ne sont pas détaillés individuellement : ce sont des
+copies de bibliothèques tierces et non du code source de l'application.
+
+PRINCIPE GÉNÉRAL DE L'INTERFACE
+------------------------------
+
+Les fichiers HTML placés dans www sont les adresses réelles des différents
+écrans. Ils fournissent également une structure visuelle statique de secours.
+Lors du chargement, assets/hybrid.js ajoute assets/app.css puis assets/app.js.
+Ce dernier reconnaît l'adresse de la page, récupère les données de l'API,
+remplace le contenu statique par une vue dynamique correspondant au rôle de
+l'utilisateur et affiche les pictogrammes PNG locaux de assets/icons.
+
+
+1. FICHIERS À LA RACINE
+-----------------------
+
+.gitignore
+    Indique à Git les contenus qui ne doivent pas être versionnés : dépendances
+    npm, plateformes et plugins Cordova générés, cordova.js, journaux, captures
+    de test et fichiers SQLite. Il protège le dépôt contre l'ajout de fichiers
+    lourds, temporaires ou propres à une machine.
+
+.npmrc
+    Configure npm pour utiliser le registre public officiel
+    https://registry.npmjs.org/. Cette configuration est actuellement
+    équivalente au réglage npm standard.
+
+BUILD_ANDROID.bat
+    Script Windows de compilation Android. Il se place automatiquement dans le
+    dossier du projet, exécute "cordova build android", puis garde la fenêtre
+    ouverte afin que le développeur puisse lire le résultat de la compilation.
+
+PREPARER_ANDROID.bat
+    Script Windows de préparation de la plateforme Android. Il vérifie d'abord
+    que la commande Cordova est installée globalement, ajoute la plateforme
+    Android au projet et lance ensuite "cordova prepare android".
+
+RUN_LOCALHOST_9000.bat
+    Raccourci Windows de lancement local. Il ouvre l'application dans le
+    navigateur sur http://localhost:9000 et démarre server.js avec Node.js.
+    Si Node.js est introuvable, il tente un serveur statique Python ; dans ce
+    mode de secours, l'interface est visible mais l'API dynamique ne fonctionne
+    pas.
+
+config.xml
+    Manifeste principal de l'application Cordova. Il définit l'identifiant
+    Android, le nom, la version, le fichier de démarrage, les permissions de
+    navigation, l'orientation, les couleurs système, les icônes et les plugins
+    natifs de barre d'état, vibration et géolocalisation.
+
+package.json
+    Manifeste npm du projet. Il contient le nom et la version de l'application
+    ainsi que les commandes de démarrage, d'initialisation/réinitialisation de
+    la base, de test et de gestion du build Android Cordova. Il mémorise aussi
+    la liste des plugins Cordova attendus.
+
+README.md
+    Documentation d'accueil du projet. Elle explique l'architecture, le
+    lancement local, les comptes de démonstration, les fonctions reliées à
+    SQLite et les prérequis de compilation Android.
+
+database.js
+    Couche d'accès et d'initialisation SQLite. Ce module ouvre la base, applique
+    database/schema.sql, crée les données de démonstration si la base est vide,
+    chiffre et vérifie les mots de passe et expose ces fonctions à server.js.
+    Exécuté directement, il prend en charge les commandes db:init et db:reset.
+
+server.js
+    Serveur HTTP et API métier de l'application. Il sert les fichiers de www,
+    gère les sessions et l'authentification, contrôle les rôles et fournit les
+    routes JSON pour les utilisateurs, élèves, bus, lignes, arrêts, trajets,
+    affectations, positions GPS, notifications, incidents et inscriptions.
+    Il ouvre la base au démarrage et la ferme proprement à l'arrêt.
+
+role.txt
+    Présent document d'inventaire. Il explique la responsabilité de chaque
+    fichier propre au projet et distingue le code source des contenus générés.
+
+
+2. MODÈLE ET SCHÉMA DE BASE DE DONNÉES
+-------------------------------------
+
+database/model.md
+    Documentation humaine du modèle relationnel. Elle explique les entités,
+    leurs relations, les règles de gestion et les choix de sécurité ou de
+    géolocalisation utilisés par la base.
+
+database/schema.sql
+    Schéma SQLite exécutable lu par database.js à chaque ouverture. Il crée les
+    tables, clés étrangères, contraintes et index nécessaires à l'application.
+    Ce fichier est indispensable même lorsqu'une base existe déjà, car il sert
+    aussi à garantir que sa structure est à jour.
+
+
+3. BASES DE DONNÉES GÉNÉRÉES
+-----------------------------
+
+data/tracking-bus.sqlite
+    Base SQLite principale utilisée par server.js. Elle conserve les comptes,
+    enfants, bus, lignes, arrêts, trajets, positions, notifications, incidents
+    et autres données métier entre deux démarrages.
+
+data/tracking-bus.sqlite-shm
+    Fichier de mémoire partagée créé automatiquement par SQLite en mode WAL.
+    Il coordonne les accès concurrents à la base principale. Ce n'est pas un
+    fichier source et il ne faut pas le manipuler pendant que le serveur tourne.
+
+data/tracking-bus.sqlite-wal
+    Journal d'écriture anticipée de la base principale. SQLite y écrit les
+    transactions avant de les fusionner dans tracking-bus.sqlite. Il peut être
+    vide, mais reste un fichier d'exécution géré automatiquement par SQLite.
+
+data/tracking-bus-test-13760.sqlite
+    Ancienne base temporaire créée par test/api.test.js pour isoler un lancement
+    de test. Le numéro correspond au processus Node qui l'a générée. Comme ce
+    test est terminé, ce fichier n'est plus utilisé par l'application.
+
+data/tracking-bus-test-13760.sqlite-shm
+    Mémoire partagée SQLite associée à l'ancienne base de test 13760. C'est un
+    résidu temporaire et non une donnée applicative.
+
+data/tracking-bus-test-13760.sqlite-wal
+    Journal WAL associé à l'ancienne base de test 13760. Il contient des
+    écritures produites pendant ce test et n'est pas lu par la base principale.
+
+
+4. TESTS
+--------
+
+test/api.test.js
+    Test d'intégration automatisé lancé par "npm test". Il démarre server.js sur
+    un port isolé avec une base SQLite temporaire, teste l'authentification et
+    plusieurs opérations métier, puis arrête le serveur et supprime les trois
+    fichiers de base temporaires créés pendant le test.
+
+
+5. POINTS D'ENTRÉE, PWA ET CATALOGUE
+-----------------------------------
+
+www/index.html
+    Point d'entrée principal utilisé par le serveur, le manifeste PWA et
+    Cordova. Il affiche l'écran d'accueil public et permet de rejoindre la
+    connexion. app.js le traite comme une page d'authentification publique.
+
+www/screens.html
+    Catalogue de développement donnant un accès direct à tous les écrans HTML.
+    Il est utile pour la démonstration, les contrôles visuels et les captures
+    sans parcourir toute la navigation métier. app.js le laisse volontairement
+    en mode statique.
+
+www/manifest.webmanifest
+    Manifeste de l'application web installable. Il définit le nom, l'adresse de
+    démarrage, le mode autonome, les couleurs, la langue et les icônes PWA de
+    192 et 512 pixels.
+
+www/sw.js
+    Service worker du mode PWA. Il précharge les pages et ressources locales
+    dans un cache, sert les fichiers déjà disponibles lorsque c'est possible,
+    ignore volontairement les réponses de l'API et fournit index.html comme
+    secours hors ligne pour une navigation.
+
+
+6. RESSOURCES VISUELLES ET JAVASCRIPT
+-------------------------------------
+
+www/assets/style.css
+    Feuille de style historique et structurelle chargée directement par les
+    pages HTML. Elle définit la palette, les cartes, formulaires, boutons,
+    listes, navigation, maquette de téléphone et styles du catalogue d'écrans.
+
+www/assets/hybrid.css
+    Couche CSS spécifique à l'affichage mobile et Cordova. Elle gère les zones
+    sûres des téléphones, le plein écran, le clavier virtuel, les interactions
+    tactiles, les adaptations aux petits écrans et l'apparence hors connexion.
+
+www/assets/app.css
+    Feuille de style de l'interface dynamique moderne construite par app.js.
+    Elle définit la coque applicative, les composants dynamiques, tableaux de
+    bord, cartes, chronologies, états, formulaires et règles responsives. Elle
+    utilise également les PNG comme masques afin que chaque pictogramme adopte
+    automatiquement la couleur de son bouton. hybrid.js la charge
+    automatiquement après les styles de base.
+
+www/assets/hybrid.js
+    Pont d'initialisation commun au navigateur, à la PWA et à Cordova. Il charge
+    app.css et app.js ; gère la barre d'état native, la vibration, le bouton
+    Retour Android, le clavier, l'état du réseau et l'enregistrement du service
+    worker.
+
+www/assets/app.js
+    Contrôleur frontal principal. Il appelle l'API, conserve le jeton de session,
+    contrôle l'accès selon le rôle, sélectionne la vue à partir du chemin HTML,
+    génère l'interface dynamique, traite les formulaires et actions, met à jour
+    les données et envoie les positions GPS pendant un trajet actif. Sa fonction
+    icon() construit les adresses locales assets/icons/<nom>.png.
+
+www/assets/interactions.js
+    Couche d'interactions de la maquette HTML statique. Elle gère les messages
+    temporaires, onglets, liens data-link, actions sur les enfants, partage,
+    ajout de champs et anciennes redirections de démonstration. Elle permet aux
+    écrans statiques de rester manipulables avant ou sans le rendu dynamique.
+
+www/assets/educanet-logo.png
+    Logo EDUCAnet affiché dans l'accueil, l'authentification et les en-têtes des
+    différentes zones de l'application.
+
+www/assets/icons/icon-192.png
+    Icône de 192 × 192 pixels utilisée comme favicon, icône tactile, icône PWA
+    et icône Android de densité moyenne.
+
+www/assets/icons/icon-512.png
+    Grande icône de 512 × 512 pixels utilisée par le manifeste PWA et comme
+    source d'icône Android haute densité.
+
+www/assets/icons/enfant.png
+    Ancienne illustration d'enfant. Aucun fichier HTML, CSS, JavaScript,
+    manifeste ou configuration ne la référence actuellement ; elle n'a donc
+    aucun rôle actif dans l'application.
+
+www/assets/icons/porofil.png
+    Ancienne image de profil dont le nom semble contenir une faute de frappe.
+    Elle n'est référencée par aucun écran ni aucune configuration et n'a aucun
+    rôle actif dans la version actuelle.
+
+www/assets/icons/arrow-left.png
+    Flèche de retour utilisée dans les formulaires publics.
+
+www/assets/icons/battery-medium.png
+    Batterie affichée dans la barre d'état simulée de l'application.
+
+www/assets/icons/bell.png
+    Cloche des raccourcis et boutons de notifications.
+
+www/assets/icons/bell-ring.png
+    Cloche active utilisée pour certaines notifications générales.
+
+www/assets/icons/bus-front.png
+    Bus vu de face pour les véhicules, trajets et indicateurs de bus actifs.
+
+www/assets/icons/circle-plus.png
+    Ajout entouré utilisé dans la navigation administrative.
+
+www/assets/icons/clock.png
+    Horloge générique employée notamment pour la durée d'un trajet.
+
+www/assets/icons/clock-3.png
+    Horloge de la ligne d'information consacrée aux horaires.
+
+www/assets/icons/clock-alert.png
+    Horloge d'alerte utilisée pour les retards et notifications de délai.
+
+www/assets/icons/graduation-cap.png
+    Chapeau d'étudiant représentant les élèves dans les listes et indicateurs.
+
+www/assets/icons/history.png
+    Historique des trajets dans les raccourcis et barres de navigation.
+
+www/assets/icons/house.png
+    Accueil principal et retour à la page d'accueil.
+
+www/assets/icons/info.png
+    Informations détaillées concernant un trajet.
+
+www/assets/icons/layout-dashboard.png
+    Tableau de bord de l'espace Administration.
+
+www/assets/icons/log-in.png
+    Action de connexion au compte.
+
+www/assets/icons/log-out.png
+    Action de déconnexion affichée dans l'en-tête et le profil.
+
+www/assets/icons/mail.png
+    Adresse électronique dans la fiche de profil.
+
+www/assets/icons/map.png
+    Carte dans les barres de navigation.
+
+www/assets/icons/map-pin.png
+    Repère géographique et compteur d'arrêts.
+
+www/assets/icons/map-pinned.png
+    Carte avec position pour les raccourcis de suivi GPS et d'itinéraire.
+
+www/assets/icons/phone.png
+    Numéro de téléphone dans la fiche de profil.
+
+www/assets/icons/play.png
+    Démarrage ou reprise d'un trajet.
+
+www/assets/icons/plus.png
+    Ajout générique, notamment dans les boutons flottants et formulaires.
+
+www/assets/icons/route.png
+    Itinéraires, lignes et trajets.
+
+www/assets/icons/send.png
+    Envoi d'une inscription, récupération ou réclamation.
+
+www/assets/icons/share-2.png
+    Partage du lien de suivi d'un bus.
+
+www/assets/icons/shield-check.png
+    Compte administrateur et rôle protégé.
+
+www/assets/icons/signal.png
+    Niveau de réseau mobile dans la barre d'état simulée.
+
+www/assets/icons/square.png
+    Arrêt et fin d'un trajet en cours.
+
+www/assets/icons/steering-wheel.png
+    Volant représentant le rôle Chauffeur.
+
+www/assets/icons/sunrise.png
+    Trajet effectué le matin.
+
+www/assets/icons/sunset.png
+    Trajet effectué l'après-midi ou le soir.
+
+www/assets/icons/timer.png
+    Minuteur utilisé pour l'indicateur de retard.
+
+www/assets/icons/triangle-alert.png
+    Incidents, réclamations et signalements de problème.
+
+www/assets/icons/user.png
+    Profil de l'utilisateur connecté.
+
+www/assets/icons/user-check.png
+    Assistante affectée ou création d'un compte Assistante.
+
+www/assets/icons/user-plus.png
+    Inscription et création d'un utilisateur.
+
+www/assets/icons/user-round.png
+    Chauffeur ou personne identifiée dans les informations de trajet.
+
+www/assets/icons/users.png
+    Groupe d'élèves, parents ou autres utilisateurs.
+
+www/assets/icons/users-round.png
+    Gestion générale des comptes dans l'espace Administration.
+
+www/assets/icons/wifi.png
+    Connexion Wi-Fi dans la barre d'état simulée.
+
+www/assets/icons/LUCIDE-LICENSE.txt
+    Licence ISC officielle des 40 pictogrammes provenant de Lucide.
+
+www/assets/icons/TABLER-LICENSE.txt
+    Licence MIT officielle de Tabler Icons, source du pictogramme
+    steering-wheel.png qui n'existe pas dans Lucide.
+
+
+7. ÉCRANS D'AUTHENTIFICATION
+----------------------------
+
+www/auth/accueil.html
+    Variante de l'écran public d'accueil dans le dossier d'authentification.
+    Elle présente l'application et conduit l'utilisateur vers la connexion.
+
+www/auth/connexion.html
+    Adresse de l'écran de connexion. app.js y construit le formulaire réel,
+    envoie l'adresse et le mot de passe à /api/auth/login, stocke le jeton reçu
+    et redirige vers l'espace Parent, Assistante/Chauffeur ou Administration.
+
+www/auth/inscription.html
+    Écran de demande d'accès. Il recueille le rôle demandé et les informations
+    personnelles, puis app.js envoie la demande à /api/auth/register afin
+    qu'elle soit examinée par un administrateur.
+
+www/auth/mot-de-passe-oublie.html
+    Écran de récupération de compte. app.js y affiche un formulaire d'adresse
+    électronique et appelle /api/auth/forgot-password pour déclencher la
+    réponse prévue par la version de démonstration.
+
+
+8. ÉCRANS DE L'ESPACE PARENT
+----------------------------
+
+www/parent/accueil.html
+    Tableau d'accueil du parent. La vue dynamique affiche ses enfants, le trajet
+    courant et les raccourcis vers le suivi, les informations, la carte,
+    l'historique, les notifications et les réclamations.
+
+www/parent/trajet-arrets.html
+    Chronologie des arrêts du trajet associé à l'enfant sélectionné. Elle montre
+    l'ordre des arrêts et leur état à partir des données reçues dans bootstrap.
+
+www/parent/informations-trajet.html
+    Fiche récapitulative du trajet : ligne, bus, accompagnement, horaires,
+    arrivée estimée et éventuels problèmes. Elle tient compte de l'enfant choisi
+    par le parent.
+
+www/parent/carte.html
+    Carte de suivi en direct du bus. app.js exploite la dernière position GPS du
+    trajet et affiche une carte OpenStreetMap ainsi que les informations de
+    localisation disponibles.
+
+www/parent/historique.html
+    Historique des trajets accessibles au parent. La vue présente les trajets
+    passés et leur état à partir des données renvoyées par l'API.
+
+www/parent/notifications.html
+    Liste des notifications du parent. Elle distingue les éléments lus et non
+    lus et permet de marquer une notification comme lue via l'API.
+
+www/parent/profil.html
+    Profil du compte parent et informations liées à ses enfants. app.js utilise
+    la fonction de profil commune pour présenter les données de l'utilisateur.
+
+www/parent/reclamation.html
+    Formulaire de réclamation du parent. Il transmet la catégorie, la
+    description et éventuellement le trajet concerné à /api/incidents.
+
+
+9. ÉCRANS DE L'ESPACE ASSISTANTE ET CHAUFFEUR
+---------------------------------------------
+
+www/assistante/accueil.html
+    Tableau d'accueil partagé par les rôles Assistante et Chauffeur. Il résume
+    le trajet affecté et fournit les accès au démarrage, aux élèves, à la carte,
+    à l'historique, aux notifications et au signalement de problème.
+
+www/assistante/demarrer-trajet.html
+    Écran de vérification et de démarrage du trajet planifié. Son action appelle
+    l'API de démarrage du trajet et active ensuite le suivi opérationnel et GPS.
+
+www/assistante/trajet-arrets.html
+    Vue opérationnelle d'un trajet en cours. Elle présente les arrêts, permet
+    de mettre à jour l'état des élèves et donne accès à l'action de fin de
+    trajet.
+
+www/assistante/recapitulatif-trajet.html
+    Bilan affiché après la fin d'un trajet. Il synthétise les élèves transportés,
+    les événements enregistrés et le statut final avant le retour à l'accueil.
+
+www/assistante/enfants.html
+    Liste des élèves associés à la ligne ou au trajet. Elle permet d'enregistrer
+    les événements de montée, descente, absence ou présence via
+    /api/student-events.
+
+www/assistante/carte.html
+    Carte GPS du trajet pour l'équipe du bus. En complément de l'affichage,
+    app.js utilise navigator.geolocation pour envoyer périodiquement la position
+    du téléphone lorsqu'un trajet est en cours.
+
+www/assistante/historique.html
+    Historique des trajets visibles par l'assistante ou le chauffeur connecté,
+    avec leurs dates, lignes et états.
+
+www/assistante/notifications.html
+    Liste des notifications adressées à l'équipe du bus. Les notifications
+    peuvent être marquées comme lues par une requête PATCH vers l'API.
+
+www/assistante/profil.html
+    Profil de l'assistante ou du chauffeur connecté, produit par le composant
+    de profil commun de app.js.
+
+www/assistante/signaler-probleme.html
+    Formulaire de déclaration d'incident pendant ou autour d'un trajet. Les
+    informations saisies sont envoyées à /api/incidents et notifiées aux
+    administrateurs.
+
+
+10. ÉCRANS DE L'ESPACE ADMINISTRATION
+-------------------------------------
+
+www/administration/accueil.html
+    Page d'accueil de l'administration. Elle centralise les raccourcis vers les
+    indicateurs, trajets, comptes, élèves, bus, lignes, affectations et
+    réclamations.
+
+www/administration/dashboard.html
+    Tableau de bord de supervision. app.js y calcule et présente les compteurs
+    de ressources, trajets, incidents et demandes d'inscription provenant des
+    données bootstrap.
+
+www/administration/carte.html
+    Vue de supervision géographique des trajets et bus. Elle réutilise les
+    positions GPS remontées par les équipes de transport.
+
+www/administration/profil.html
+    Profil de l'administrateur connecté, affiché avec le composant de profil
+    commun et les informations de compte reçues de l'API.
+
+www/administration/reclamations.html
+    Tableau de traitement des incidents et réclamations. L'administrateur peut
+    consulter les déclarations et modifier leur état par l'API.
+
+www/administration/signaler-probleme.html
+    Formulaire permettant à l'administration de créer elle-même un incident
+    avec une catégorie, une description et un trajet facultatif.
+
+www/administration/ajouter-compte.html
+    Première étape de création d'un compte. Elle propose le type de compte puis
+    dirige vers le formulaire spécialisé Parent, Chauffeur, Assistante ou
+    Administrateur.
+
+www/administration/ajouter-parent.html
+    Formulaire dynamique de création d'un utilisateur ayant le rôle PARENT.
+    L'enregistrement est envoyé à la ressource /api/users.
+
+www/administration/ajouter-chauffeur.html
+    Formulaire dynamique de création d'un utilisateur ayant le rôle DRIVER,
+    correspondant au chauffeur.
+
+www/administration/ajouter-assistante.html
+    Formulaire dynamique de création d'un utilisateur ayant le rôle ASSISTANT,
+    correspondant à l'accompagnatrice du bus.
+
+www/administration/ajouter-admin.html
+    Formulaire dynamique de création d'un autre utilisateur ayant le rôle
+    ADMIN.
+
+www/administration/liste-parents.html
+    Liste administrative des comptes parents. Elle utilise la configuration
+    générique de gestion des utilisateurs et propose l'accès à l'ajout d'un
+    parent.
+
+www/administration/liste-chauffeurs.html
+    Liste administrative filtrée sur les utilisateurs DRIVER, avec accès au
+    formulaire d'ajout d'un chauffeur.
+
+www/administration/liste-assistantes.html
+    Liste administrative filtrée sur les utilisateurs ASSISTANT, avec accès au
+    formulaire d'ajout d'une assistante.
+
+www/administration/liste-enfants.html
+    Liste administrative des élèves enregistrés, de leurs informations et de
+    leurs relations avec les parents et lignes.
+
+www/administration/liste-bus.html
+    Liste des véhicules avec leur immatriculation, libellé, capacité, état et
+    identifiant de dispositif GPS. Elle conduit au formulaire d'ajout de bus.
+
+www/administration/ajouter-bus.html
+    Formulaire de création d'un bus. Il envoie l'immatriculation, le nom, la
+    capacité, l'état et l'identifiant GPS à /api/buses.
+
+www/administration/liste-lignes.html
+    Liste des lignes de transport avec leur code, origine, destination et
+    horaires. Elle donne accès à la création d'une nouvelle ligne.
+
+www/administration/ajouter-ligne.html
+    Formulaire de création d'une ligne de transport. Les données sont envoyées
+    à /api/routes.
+
+www/administration/affecter-assistantes.html
+    Vue des affectations centrée sur les assistantes. app.js y affiche les
+    associations existantes entre personnel, bus, ligne et trajet.
+
+www/administration/affecter-chauffeurs.html
+    Vue des affectations centrée sur les chauffeurs et leurs trajets ou bus
+    attribués.
+
+www/administration/affecter-enfants.html
+    Vue d'affectation des élèves aux ressources de transport. Elle sert à
+    consulter ou préparer les associations élève, ligne et arrêt.
+
+www/administration/affecter-trajet.html
+    Vue générale des affectations de trajet. Elle présente les associations
+    entre ligne, bus, chauffeur, assistante et date de départ.
+
+
+11. CAPTURES ET ARTEFACTS DE CONTRÔLE
+------------------------------------
+
+artifacts/admin-bus-desktop.png
+    Capture de contrôle visuel de la gestion des bus en affichage ordinateur.
+    Elle ne participe pas à l'exécution de l'application.
+
+artifacts/admin-dashboard.png
+    Capture de contrôle visuel du tableau de bord administratif.
+
+artifacts/assistant-children-360.png
+    Capture de la liste des enfants de l'espace Assistante sur une largeur
+    mobile de 360 pixels, utile pour vérifier le responsive.
+
+artifacts/login.png
+    Capture de référence de l'écran de connexion.
+
+artifacts/parent-home.png
+    Capture de référence de la page d'accueil Parent.
+
+artifacts/parent-map.png
+    Ancienne capture de contrôle de la carte Parent.
+
+artifacts/parent-map-fixed.png
+    Capture de la carte Parent après une correction visuelle ; elle permet une
+    comparaison manuelle avec parent-map.png.
+
+artifacts/registration.png
+    Capture de référence de l'écran de demande d'inscription.
+
+
+12. SCRIPT DE GÉNÉRATION ET DOSSIERS TIERS
+------------------------------------------
+
+scripts/generate-png-icons.ps1
+    Script reproductible qui télécharge les sources officielles Lucide et
+    Tabler, les convertit en PNG transparents de 64 × 64 pixels avec Chrome ou
+    Edge, enregistre les licences et place le résultat dans assets/icons.
+
+node_modules/
+    Contient des bibliothèques npm installées localement et leurs fichiers
+    internes. Dans l'état actuel, package.json ne déclare aucune dépendance npm
+    et "npm ls" les marque toutes comme extraneous. Le serveur applicatif
+    n'importe que des modules intégrés à Node.js. Ce dossier n'est donc pas du
+    code source et peut être régénéré si de vraies dépendances sont déclarées.
+
+node_modules/.package-lock.json
+    Verrou interne généré par npm pour décrire le contenu installé dans
+    node_modules. Il ne remplace pas un package-lock.json à la racine et suit le
+    même cycle de vie que le dossier node_modules.
+
+platforms/
+    Destination générée par Cordova pour les projets Android ou navigateur.
+    Le dossier est actuellement vide. Après "cordova platform add android", il
+    contiendra une copie générée du projet Android et ne devra pas être traité
+    comme du code source principal.
