@@ -1166,6 +1166,7 @@
     document.addEventListener('click', handleClick);
 
     if (path.endsWith('/screens.html')) return;
+    if ((path === '/' || path.endsWith('/index.html')) && document.getElementById('react-root')) return;
     if (path.endsWith('/auth/connexion.html')) return loginPage();
     if (path.endsWith('/auth/inscription.html')) return registrationPage();
     if (path.endsWith('/auth/mot-de-passe-oublie.html')) return forgotPage();

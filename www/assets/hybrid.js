@@ -9,9 +9,19 @@
   document.head.appendChild(modernStyles);
 
   function loadApplication() {
-    const appScript = document.createElement('script');
-    appScript.src = assetBase + 'app.js';
-    document.head.appendChild(appScript);
+    const reactScript = document.createElement('script');
+    reactScript.src = 'https://unpkg.com/react@18/umd/react.development.js';
+    reactScript.onload = function () {
+      const reactDomScript = document.createElement('script');
+      reactDomScript.src = 'https://unpkg.com/react-dom@18/umd/react-dom.development.js';
+      reactDomScript.onload = function () {
+        const appScript = document.createElement('script');
+        appScript.src = assetBase + 'app.js';
+        document.head.appendChild(appScript);
+      };
+      document.head.appendChild(reactDomScript);
+    };
+    document.head.appendChild(reactScript);
   }
 
   if (location.protocol === 'file:') {

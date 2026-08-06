@@ -20,5 +20,8 @@
       "cordova-plugin-vibration": {},
       "cordova-plugin-geolocation": {}
     }
+  },
+  "dependencies": {
+    "react-router-dom": "^7.18.2"
   }
 }
