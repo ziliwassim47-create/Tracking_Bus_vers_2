@@ -1,4 +1,5 @@
 import React from "react";
+import { Platform, StyleSheet, View } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
@@ -43,8 +44,10 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function App() {
   return (
     <ParentProvider>
-      <NavigationContainer>
-        <Stack.Navigator initialRouteName="Login">
+      <View style={styles.appShell}>
+        <View style={styles.appViewport}>
+          <NavigationContainer>
+            <Stack.Navigator initialRouteName="Login">
           {/* ─── Auth ─── */}
           <Stack.Screen
             name="Login"
@@ -95,8 +98,26 @@ export default function App() {
             component={ParentProfileScreen}
             options={{ headerShown: false }}
           />
-        </Stack.Navigator>
-      </NavigationContainer>
+            </Stack.Navigator>
+          </NavigationContainer>
+        </View>
+      </View>
     </ParentProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  appShell: {
+    flex: 1,
+    width: '100%',
+    alignItems: Platform.OS === 'web' ? 'center' : 'stretch',
+    backgroundColor: '#dff7f3',
+  },
+  appViewport: {
+    flex: 1,
+    width: '100%',
+    maxWidth: Platform.OS === 'web' ? 600 : undefined,
+    backgroundColor: '#f0fdfa',
+    overflow: 'hidden',
+  },
+});

@@ -9,6 +9,8 @@ import {
   Animated,
   Easing,
   Platform,
+  KeyboardAvoidingView,
+  ScrollView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -68,8 +70,16 @@ export default function LoginScreen(props: Readonly<LoginScreenProps>) {
   const loginButtonLabel = loading ? 'Connexion...' : '🔐 Se connecter';
 
   return (
-    <View style={styles.body}>
-      <Animated.View
+    <KeyboardAvoidingView
+      style={styles.body}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={styles.bodyContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View
         style={[
           styles.loginContainer,
           {
@@ -136,8 +146,9 @@ export default function LoginScreen(props: Readonly<LoginScreenProps>) {
           <Text style={styles.loginButtonText}>{loginButtonLabel}</Text>
         </TouchableOpacity>
 
-      </Animated.View>
-    </View>
+        </Animated.View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -145,12 +156,18 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     backgroundColor: '#f0fdfa',
+  },
+  bodyContent: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 24,
   },
   loginContainer: {
-    width: '90%',
+    width: '100%',
     maxWidth: 420,
+    ...Platform.select({ web: { boxSizing: 'border-box' as const } }),
     backgroundColor: 'white',
     borderRadius: 20,
     paddingVertical: 40,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, useWindowDimensions } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Table, TableWrapper, Cell } from 'react-native-table-component'; 
 import { Picker } from "@react-native-picker/picker";
@@ -27,6 +27,8 @@ export default function Track({  route,navigation }: ListScreenProps) {
   const [selectedBus, setSelectedBus] = useState<string>("0"); 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const { width: viewportWidth } = useWindowDimensions();
+  const isPhoneLayout = viewportWidth <= 480;
   
   // Helper function to extract number from niveau (e.g., "1ere anne" -> "1", "2eme" -> "2")
   const getNiveauNumber = (niveau: string): string => {
@@ -138,15 +140,15 @@ export default function Track({  route,navigation }: ListScreenProps) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Text style={styles.header}>🚍 Bus Tracker</Text>
+      <View style={[styles.headerContainer, isPhoneLayout && styles.headerContainerPhone]}>
+        <Text style={[styles.header, isPhoneLayout && styles.headerPhone]}>🚍 Bus Tracker</Text>
         <Text style={styles.subtitle}>Gestion des présences</Text>
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
           <Text style={styles.logoutButtonText}>🚪 Se déconnecter</Text>
         </TouchableOpacity>
       </View>
      
-      <View style={styles.pickerContainer}>
+      <View style={[styles.pickerContainer, isPhoneLayout && styles.edgeSpacingPhone]}>
         <Text style={styles.pickerLabel}>Sélectionner un bus:</Text>
         <Picker 
           selectedValue={selectedBus} 
@@ -178,42 +180,40 @@ export default function Track({  route,navigation }: ListScreenProps) {
       ) : (
         <ScrollView 
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, isPhoneLayout && styles.scrollContentPhone]}
           showsVerticalScrollIndicator={true}
         >
           {users.length > 0 ? (
-            <View style={styles.tableContainer}>
-              <Table borderStyle={styles.tableBorder}>
-                <TableWrapper style={styles.tableHeaderRow}>
-                  <Cell data="Nom" style={styles.tableHeaderCell} textStyle={styles.tableHeaderText} flex={2} />
-                  <Cell data="Niveau" style={styles.tableHeaderCell} textStyle={styles.tableHeaderText} flex={1} />
-                  <Cell data="Présence" style={styles.tableHeaderCell} textStyle={styles.tableHeaderText} flex={2} />
-                </TableWrapper>
-                {users.map((student, index) => {
-                  return (
+            isPhoneLayout ? (
+              <View style={styles.studentCards}>
+                {users.map((student, index) => (
+                  <View key={student.ID} style={styles.studentCard}>
+                    <View style={styles.studentCardInfo}>
+                      <Text style={styles.studentCardName} numberOfLines={2}>{student.NOM}</Text>
+                      <Text style={styles.studentCardLevel}>Niveau {getNiveauNumber(student.NIVEAU)}</Text>
+                    </View>
+                    {renderPresence(student.PRESENCE, index)}
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.tableContainer}>
+                <Table borderStyle={styles.tableBorder}>
+                  <TableWrapper style={styles.tableHeaderRow}>
+                    <Cell data="Nom" style={styles.tableHeaderCell} textStyle={styles.tableHeaderText} flex={2} />
+                    <Cell data="Niveau" style={styles.tableHeaderCell} textStyle={styles.tableHeaderText} flex={1} />
+                    <Cell data="Présence" style={styles.tableHeaderCell} textStyle={styles.tableHeaderText} flex={2} />
+                  </TableWrapper>
+                  {users.map((student, index) => (
                     <TableWrapper key={student.ID} style={index % 2 === 0 ? StyleSheet.flatten([styles.tableRow, styles.tableRowEven]) : styles.tableRow}>
-                      <Cell 
-                        data={student.NOM} 
-                        textStyle={styles.tableCellText} 
-                        flex={2}
-                        style={styles.tableCell}
-                      />
-                      <Cell 
-                        data={getNiveauNumber(student.NIVEAU)} 
-                        textStyle={styles.tableCellTextCenter} 
-                        flex={1}
-                        style={styles.tableCell}
-                      />
-                      <Cell 
-                        data={renderPresence(student.PRESENCE, index)} 
-                        flex={2}
-                        style={styles.tableCell}
-                      />
+                      <Cell data={student.NOM} textStyle={styles.tableCellText} flex={2} style={styles.tableCell} />
+                      <Cell data={getNiveauNumber(student.NIVEAU)} textStyle={styles.tableCellTextCenter} flex={1} style={styles.tableCell} />
+                      <Cell data={renderPresence(student.PRESENCE, index)} flex={2} style={styles.tableCell} />
                     </TableWrapper>
-                  );
-                })}
-              </Table>
-            </View>
+                  ))}
+                </Table>
+              </View>
+            )
           ) : (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyIcon}>📋</Text>
@@ -225,7 +225,7 @@ export default function Track({  route,navigation }: ListScreenProps) {
       )}
 
       <TouchableOpacity 
-        style={[styles.validButton, (users.length === 0 || loading) && styles.validButtonDisabled]} 
+        style={[styles.validButton, isPhoneLayout && styles.edgeSpacingPhone, (users.length === 0 || loading) && styles.validButtonDisabled]}
         onPress={handleValider}
         disabled={users.length === 0 || loading}
       >
@@ -249,6 +249,13 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 30,
     ...platformShadow("#14b8a6", 6, 0.4, 12, 10),
   },
+  headerContainerPhone: {
+    paddingTop: 34,
+    paddingBottom: 18,
+    paddingHorizontal: 14,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
+  },
   header: { 
     textAlign: "center", 
     fontSize: 32, 
@@ -257,6 +264,9 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     letterSpacing: 0.8,
     ...platformTextShadow("rgba(0,0,0,0.1)", 2, 4),
+  },
+  headerPhone: {
+    fontSize: 26,
   },
   subtitle: {
     textAlign: "center",
@@ -290,6 +300,9 @@ const styles = StyleSheet.create({
     ...platformShadow("#000", 3, 0.1, 10, 4),
     borderWidth: 1.5,
     borderColor: "#e5e7eb",
+  },
+  edgeSpacingPhone: {
+    marginHorizontal: 12,
   },
   pickerLabel: {
     fontSize: 15,
@@ -327,6 +340,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 20,
     paddingTop: 12,
+  },
+  scrollContentPhone: {
+    paddingHorizontal: 12,
+  },
+  studentCards: {
+    gap: 10,
+  },
+  studentCard: {
+    minHeight: 76,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: "#e5e7eb",
+    ...platformShadow("#000", 2, 0.07, 8, 3),
+  },
+  studentCardInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  studentCardName: {
+    color: "#1e293b",
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 5,
+  },
+  studentCardLevel: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "600",
   },
   tableContainer: {
     backgroundColor: "#fff",

@@ -6,7 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Animated,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useParent } from '../../context/ParentContext';
@@ -25,8 +25,6 @@ type RootStackParamList = {
 };
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ParentHome'>;
-
-const { width } = Dimensions.get('window');
 
 function getInitials(firstName: string, lastName: string) {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
@@ -58,10 +56,11 @@ interface ActionTileProps {
   onPress: () => void;
   primary?: boolean;
   color?: string;
+  width: number;
 }
 
 function ActionTile(props: Readonly<ActionTileProps>) {
-  const { icon, label, onPress, primary, color = '#14b8a6' } = props;
+  const { icon, label, onPress, primary, color = '#14b8a6', width } = props;
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () =>
@@ -75,6 +74,7 @@ function ActionTile(props: Readonly<ActionTileProps>) {
       onPress={onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
+      style={{ width }}
     >
       <Animated.View
         style={[
@@ -97,6 +97,11 @@ function ActionTile(props: Readonly<ActionTileProps>) {
 export default function ParentHomeScreen(props: Readonly<Props>) {
   const { navigation } = props;
   const { user, selectedChild, currentTrip, busPosition, unreadCount } = useParent();
+  const { width: viewportWidth } = useWindowDimensions();
+  const contentWidth = Math.min(viewportWidth, 600);
+  const actionColumns = contentWidth < 520 ? 2 : 3;
+  const actionTileWidth = (contentWidth - 24 - (actionColumns - 1) * 10) / actionColumns;
+  const isNarrowPhone = viewportWidth <= 380;
 
   const positionAge = busPosition
     ? new Date(busPosition.recorded_at).toLocaleTimeString('fr-FR', {
@@ -122,7 +127,7 @@ export default function ParentHomeScreen(props: Readonly<Props>) {
         </View>
 
         {/* Bus position info */}
-        <View style={styles.busInfoRow}>
+        <View style={[styles.busInfoRow, isNarrowPhone && styles.busInfoRowNarrow]}>
           <Text style={styles.busInfoDot}>🟢</Text>
           <Text style={styles.busInfoText}>
             Dernière position du bus : {positionAge}
@@ -147,7 +152,7 @@ export default function ParentHomeScreen(props: Readonly<Props>) {
         <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Trajet en cours</Text>
         {currentTrip ? (
           <View style={styles.tripCard}>
-            <View style={styles.tripCardRow}>
+            <View style={[styles.tripCardRow, isNarrowPhone && styles.tripCardRowNarrow]}>
               <Text style={styles.tripIcon}>🚌</Text>
               <View style={styles.tripCardBody}>
                 <Text style={styles.tripTitle}>
@@ -160,6 +165,7 @@ export default function ParentHomeScreen(props: Readonly<Props>) {
               <View
                 style={[
                   styles.statusBadge,
+                  isNarrowPhone && styles.statusBadgeNarrow,
                   { backgroundColor: `${STATUS_COLORS[currentTrip.status]}20` },
                 ]}
               >
@@ -190,12 +196,12 @@ export default function ParentHomeScreen(props: Readonly<Props>) {
         {/* ─── Actions Grid ─── */}
         <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Actions rapides</Text>
         <View style={styles.actionsGrid}>
-          <ActionTile icon="🗺️" label="Carte en direct" primary onPress={() => navigation.navigate('ParentMap')} />
-          <ActionTile icon="🛣️" label="Historique" onPress={() => navigation.navigate('ParentHistory')} />
-          <ActionTile icon="🔔" label="Notifications" onPress={() => navigation.navigate('ParentNotifications')} />
-          <ActionTile icon="⚠️" label="Réclamation" onPress={() => navigation.navigate('ParentClaim')} />
-          <ActionTile icon="👤" label="Mon profil" onPress={() => navigation.navigate('ParentProfile')} />
-          <ActionTile icon="ℹ️" label="Informations" onPress={() => {}} />
+          <ActionTile width={actionTileWidth} icon="🗺️" label="Carte en direct" primary onPress={() => navigation.navigate('ParentMap')} />
+          <ActionTile width={actionTileWidth} icon="🛣️" label="Historique" onPress={() => navigation.navigate('ParentHistory')} />
+          <ActionTile width={actionTileWidth} icon="🔔" label="Notifications" onPress={() => navigation.navigate('ParentNotifications')} />
+          <ActionTile width={actionTileWidth} icon="⚠️" label="Réclamation" onPress={() => navigation.navigate('ParentClaim')} />
+          <ActionTile width={actionTileWidth} icon="👤" label="Mon profil" onPress={() => navigation.navigate('ParentProfile')} />
+          <ActionTile width={actionTileWidth} icon="ℹ️" label="Informations" onPress={() => {}} />
         </View>
 
         <View style={{ height: 20 }} />
@@ -263,6 +269,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 8,
   },
+  busInfoRowNarrow: {
+    flexWrap: 'wrap',
+  },
   busInfoDot: {
     fontSize: 10,
   },
@@ -313,12 +322,16 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     gap: 10,
   },
+  tripCardRowNarrow: {
+    flexWrap: 'wrap',
+  },
   tripIcon: {
     fontSize: 28,
     marginTop: 2,
   },
   tripCardBody: {
     flex: 1,
+    minWidth: 0,
   },
   tripTitle: {
     fontSize: 14,
@@ -340,6 +353,9 @@ const styles = StyleSheet.create({
   statusBadgeText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  statusBadgeNarrow: {
+    marginLeft: 38,
   },
   routeLine: {
     flexDirection: 'row',
@@ -397,7 +413,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   actionTile: {
-    width: (width - 52) / 3,
+    width: '100%',
     backgroundColor: '#fff',
     borderRadius: 18,
     padding: 16,
