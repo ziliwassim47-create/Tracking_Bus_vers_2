@@ -77,9 +77,9 @@ console.log(" 🚌🚌🚙🚙 Commencer le partage")
       };
       setLocation(newCoords);
       if (socket) {
-        socket.emit("busLocationUpdate", newCoords);
+        socket.emit("busLocationUpdate", { ...newCoords, bus_id: Number(selectedBus) });
         console.log("📡 Localisation Bus envoyée :", newCoords);
-        socket.emit("busLocationStart", newCoords1);
+        socket.emit("busLocationStart", { ...newCoords1, bus_id: Number(selectedBus) });
         console.log("📍 Départ envoyés au serveur." );
         socket.emit("busId", selectedBus);
         console.log("🚌 id bus",selectedBus );  

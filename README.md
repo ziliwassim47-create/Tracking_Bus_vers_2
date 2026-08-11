@@ -100,6 +100,7 @@ Les nouveaux comptes validés par l'administration reçoivent aussi
 - utilisateurs, rôles et profils;
 - enfants et relation avec leurs parents;
 - affectation de chaque enfant à un trajet, un bus et un arrêt, avec contrôle de capacité;
+- sélection d’un enfant dans l’espace Parent avec carte React et suivi GPS de son bus en temps réel;
 - bus, lignes, arrêts et inscriptions aux lignes;
 - affectations chauffeur, assistante, bus et itinéraire;
 - démarrage et fin d'un trajet;

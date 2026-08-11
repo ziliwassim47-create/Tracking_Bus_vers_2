@@ -101,6 +101,18 @@ test('API métier et persistance SQLite', async t => {
   assert.equal(parentBootstrap.payload.tripStops.length, 5);
   assert.equal(parentBootstrap.payload.currentTrip.status, 'IN_PROGRESS');
 
+  const firstChildTracking = await request(`/parent/children/${parentBootstrap.payload.students[0].id}/tracking`, {}, parent.token);
+  assert.equal(firstChildTracking.response.status, 200);
+  assert.equal(firstChildTracking.payload.assignment.bus_id, 1);
+  assert.ok(firstChildTracking.payload.assignment.assistant_name);
+  assert.ok(firstChildTracking.payload.stops.length >= 2);
+  assert.ok(firstChildTracking.payload.metrics.estimated_duration_min > 0);
+  assert.ok(firstChildTracking.payload.metrics.distance_km > 0);
+  assert.ok(firstChildTracking.payload.latest_position);
+
+  const inaccessibleChildTracking = await request('/parent/children/3/tracking', {}, parent.token);
+  assert.equal(inaccessibleChildTracking.response.status, 404);
+
   const assistantBootstrap = await request('/bootstrap', {}, assistant.token);
   assert.equal(assistantBootstrap.response.status, 200);
   assert.equal(assistantBootstrap.payload.user.role, 'ASSISTANT');
@@ -392,6 +404,10 @@ test('API métier et persistance SQLite', async t => {
   assert.equal(newParentBootstrap.response.status, 200);
   assert.equal(newParentBootstrap.payload.students.length, 1);
   assert.equal(newParentBootstrap.payload.students[0].id, createdChild.payload.id);
+  const newParentTracking = await request(`/parent/children/${createdChild.payload.id}/tracking`, {}, parentPhoneLogin.payload.token);
+  assert.equal(newParentTracking.response.status, 200);
+  assert.equal(newParentTracking.payload.assignment.bus_id, busResult.payload.id);
+  assert.equal(newParentTracking.payload.assignment.route_id, routeWithStops.payload.id);
 
   const createdUser = await request('/users', {
     method: 'POST',

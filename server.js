@@ -187,6 +187,22 @@ function all(sql, ...params) {
   return db.prepare(sql).all(...params);
 }
 
+function haversineKm(first, second) {
+  if (!first || !second) return 0;
+  const toRadians = value => Number(value) * Math.PI / 180;
+  const earthRadiusKm = 6371;
+  const deltaLat = toRadians(second.latitude - first.latitude);
+  const deltaLng = toRadians(second.longitude - first.longitude);
+  const a = Math.sin(deltaLat / 2) ** 2
+    + Math.cos(toRadians(first.latitude)) * Math.cos(toRadians(second.latitude))
+    * Math.sin(deltaLng / 2) ** 2;
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function pathDistanceKm(points) {
+  return points.slice(1).reduce((total, point, index) => total + haversineKm(points[index], point), 0);
+}
+
 function canOperateTrip(user, trip) {
   return user.role === 'ADMIN' || trip.driver_id === user.id || trip.assistant_id === user.id;
 }
@@ -681,6 +697,85 @@ async function handleApi(req, res, url) {
     return json(res, 200, buildBootstrap(user));
   }
 
+  const parentChildTrackingMatch = pathname.match(/^\/api\/parent\/children\/(\d+)\/tracking$/);
+  if (req.method === 'GET' && parentChildTrackingMatch) {
+    if (!requireRole(res, user, ['PARENT'])) return;
+    const student = db.prepare(`SELECT id, prenom AS first_name, nom AS last_name,
+      classe AS school_class, adresseDomicile AS home_address,
+      latitudeDomicile AS home_lat, longitudeDomicile AS home_lng
+      FROM Enfant WHERE id = ? AND idParent = ? AND actif = 1`).get(parentChildTrackingMatch[1], user.id);
+    if (!student) return json(res, 404, { error: 'Enfant introuvable pour ce parent' });
+
+    const assignment = db.prepare(`SELECT te.idTrajet AS route_id, te.idBus AS bus_id, te.idArret AS stop_id,
+      r.code AS route_code, r.nomTrajet AS route_name, r.origine AS origin, r.destination,
+      r.tempsTotalEstime AS estimated_duration_min,
+      b.matricule AS registration, b.libelle AS bus_label, b.capacite AS capacity,
+      a.idAssistante AS assistant_id,
+      COALESCE(ast.prenom || ' ' || ast.nom, 'Non affectée') AS assistant_name,
+      ast.telephone AS assistant_phone,
+      ar.nom AS stop_name, ar.adresse AS stop_address, ar.latitude AS stop_latitude,
+      ar.longitude AS stop_longitude, ar.ordreArret AS stop_order
+      FROM TrajetEnfant te
+      JOIN Trajet r ON r.id = te.idTrajet
+      LEFT JOIN Bus b ON b.id = te.idBus
+      LEFT JOIN Affectation a ON a.idTrajet = te.idTrajet AND a.idBus = te.idBus AND a.actif = 1
+      LEFT JOIN Utilisateur ast ON ast.id = a.idAssistante
+      JOIN Arret ar ON ar.id = te.idArret
+      WHERE te.idEnfant = ? AND te.actif = 1
+      ORDER BY a.actif DESC, datetime(te.affecteLe) DESC LIMIT 1`).get(student.id);
+
+    if (!assignment?.bus_id) {
+      return json(res, 200, { student, assignment: null, trip: null, latest_position: null, stops: [], metrics: null });
+    }
+
+    const trip = db.prepare(`SELECT id, idTrajet AS route_id, idBus AS bus_id,
+      sens AS direction, statut AS status, departPrevuLe AS scheduled_start_at,
+      departReelLe AS actual_start_at, finReelleLe AS actual_end_at, retardMinutes AS delay_minutes
+      FROM ExecutionTrajet WHERE idTrajet = ? AND idBus = ?
+      ORDER BY CASE statut WHEN 'IN_PROGRESS' THEN 0 WHEN 'PLANNED' THEN 1 ELSE 2 END,
+        datetime(departPrevuLe) DESC LIMIT 1`).get(assignment.route_id, assignment.bus_id) || null;
+    const stops = all(`SELECT id, nom AS name, adresse AS address, latitude, longitude,
+      ordreArret AS stop_order, estimationTemps AS planned_offset_min
+      FROM Arret WHERE idTrajet = ? ORDER BY ordreArret`, assignment.route_id);
+    const positions = trip ? all(`SELECT latitude, longitude, vitesseKmh AS speed_kmh,
+      direction AS heading, enregistreLe AS recorded_at FROM PositionGPS
+      WHERE idBus = ? AND idExecutionTrajet = ? ORDER BY datetime(enregistreLe)`, assignment.bus_id, trip.id) : [];
+    const latestPosition = positions.at(-1) || db.prepare(`SELECT latitude, longitude,
+      vitesseKmh AS speed_kmh, direction AS heading, enregistreLe AS recorded_at
+      FROM PositionGPS WHERE idBus = ? ORDER BY datetime(enregistreLe) DESC LIMIT 1`).get(assignment.bus_id) || null;
+    const estimatedDuration = Number(assignment.estimated_duration_min)
+      || Math.max(0, ...stops.map(stop => Number(stop.planned_offset_min) || 0));
+    const distanceKm = positions.length > 1 ? pathDistanceKm(positions) : pathDistanceKm(stops);
+    const startedAt = trip?.actual_start_at ? Date.parse(trip.actual_start_at) : NaN;
+    const endedAt = trip?.actual_end_at ? Date.parse(trip.actual_end_at) : Date.now();
+    const elapsedMinutes = Number.isFinite(startedAt) ? Math.max(0, Math.round((endedAt - startedAt) / 60000)) : 0;
+    const assignedStop = { latitude: assignment.stop_latitude, longitude: assignment.stop_longitude };
+
+    return json(res, 200, {
+      student,
+      assignment: {
+        route_id: assignment.route_id, bus_id: assignment.bus_id, stop_id: assignment.stop_id,
+        route_code: assignment.route_code, route_name: assignment.route_name,
+        origin: assignment.origin, destination: assignment.destination,
+        registration: assignment.registration, bus_label: assignment.bus_label, capacity: assignment.capacity,
+        assistant_id: assignment.assistant_id, assistant_name: assignment.assistant_name,
+        assistant_phone: assignment.assistant_phone,
+        stop_name: assignment.stop_name, stop_address: assignment.stop_address,
+        stop_latitude: assignment.stop_latitude, stop_longitude: assignment.stop_longitude,
+        stop_order: assignment.stop_order
+      },
+      trip,
+      latest_position: latestPosition,
+      stops,
+      metrics: {
+        estimated_duration_min: estimatedDuration,
+        elapsed_minutes: elapsedMinutes,
+        distance_km: Number(distanceKm.toFixed(2)),
+        remaining_to_stop_km: latestPosition ? Number(haversineKm(latestPosition, assignedStop).toFixed(2)) : null
+      }
+    });
+  }
+
   const notificationMatch = pathname.match(/^\/api\/notifications\/(\d+)\/read$/);
   if (req.method === 'PATCH' && notificationMatch) {
     const notification = db.prepare('SELECT id, idUtilisateur AS user_id FROM Notification WHERE id = ?').get(notificationMatch[1]);
@@ -752,6 +847,10 @@ async function handleApi(req, res, url) {
       INSERT INTO PositionGPS(idBus, idExecutionTrajet, latitude, longitude, vitesseKmh, direction, precisionM)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(trip.bus_id, trip.id, body.latitude, body.longitude, body.speed_kmh || 0, body.heading || 0, body.accuracy_m || null);
+    io.emit('busLocationUpdate', {
+      bus_id: trip.bus_id, trip_id: trip.id, latitude: body.latitude, longitude: body.longitude,
+      speed_kmh: body.speed_kmh || 0, heading: body.heading || 0, recorded_at: new Date().toISOString()
+    });
     return json(res, 201, { ok: true });
   }
 
@@ -1016,18 +1115,38 @@ io.on("connection", (socket) => {
   console.log("✅ Client WebSocket connecté :", socket.id);
 
   socket.on("busLocationUpdate", (data) => {
-    console.log("📩 busLocationUpdate :", data);
-    io.emit("busLocationUpdate", data);
+    const busId = Number(data?.bus_id || socket.data.busId);
+    const latitude = Number(data?.latitude);
+    const longitude = Number(data?.longitude);
+    const payload = {
+      ...data,
+      bus_id: Number.isFinite(busId) && busId > 0 ? busId : null,
+      latitude,
+      longitude,
+      recorded_at: new Date().toISOString()
+    };
+    console.log("📩 busLocationUpdate :", payload);
+    if (payload.bus_id && Number.isFinite(latitude) && Number.isFinite(longitude)) {
+      const trip = db.prepare("SELECT id FROM ExecutionTrajet WHERE idBus = ? AND statut = 'IN_PROGRESS' ORDER BY datetime(departPrevuLe) DESC LIMIT 1").get(payload.bus_id);
+      if (trip) {
+        payload.trip_id = trip.id;
+        db.prepare(`INSERT INTO PositionGPS(idBus, idExecutionTrajet, latitude, longitude, vitesseKmh, direction, precisionM)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`)
+          .run(payload.bus_id, trip.id, latitude, longitude, Number(data.speed_kmh) || 0, Number(data.heading) || 0, data.accuracy_m || null);
+      }
+    }
+    io.emit("busLocationUpdate", payload);
   });
 
   socket.on("busId", (data) => {
     console.log("🔑 busId :", data);
-    io.emit("busId", data);
+    socket.data.busId = Number(data);
+    io.emit("busId", socket.data.busId);
   });
 
   socket.on("busLocationStart", (data) => {
     console.log("🚌 busLocationStart :", data);
-    io.emit("busLocationStart", data);
+    io.emit("busLocationStart", { ...data, bus_id: Number(data?.bus_id || socket.data.busId) || null });
   });
 
   socket.on("disconnect", () => {
