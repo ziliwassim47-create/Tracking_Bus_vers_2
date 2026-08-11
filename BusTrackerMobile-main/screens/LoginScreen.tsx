@@ -20,12 +20,9 @@ type RootStackParamList = {
   Tracking: { selectedBus: string };
   TrackingScreenBus: any;
   Students: { selectedBus: string };
-  ParentHome: undefined;
 };
 
 type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;
-
-type Role = 'DRIVER' | 'PARENT';
 
 export default function LoginScreen(props: Readonly<LoginScreenProps>) {
   const { navigation } = props;
@@ -33,7 +30,6 @@ export default function LoginScreen(props: Readonly<LoginScreenProps>) {
   const [password, setPassword] = useState('password123');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [role, setRole] = useState<Role>('DRIVER');
 
   // Animation for container translateY + opacity (like fade-in + slide)
   const animTranslateY = React.useRef(new Animated.Value(20)).current;
@@ -65,22 +61,11 @@ export default function LoginScreen(props: Readonly<LoginScreenProps>) {
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
-      if (role === 'PARENT') {
-        // Navigate to Parent module
-        navigation.replace('ParentHome');
-      } else {
-        // Navigate to Driver/Assistant module (existing flow)
-        navigation.replace('List');
-      }
+      navigation.replace('List');
     }, 1500);
   }
 
-  let loginButtonLabel = '🚌 Accès Chauffeur';
-  if (loading) {
-    loginButtonLabel = 'Connexion...';
-  } else if (role === 'PARENT') {
-    loginButtonLabel = '👨‍👩‍👦 Accès Parent';
-  }
+  const loginButtonLabel = loading ? 'Connexion...' : '🔐 Se connecter';
 
   return (
     <View style={styles.body}>
@@ -97,33 +82,6 @@ export default function LoginScreen(props: Readonly<LoginScreenProps>) {
         <View style={styles.header}>
           <Text style={styles.title}>Bienvenue</Text>
           <Text style={styles.subtitle}>Gérez l'éducation en toute élégance</Text>
-        </View>
-
-        {/* ─── Role Selector ─── */}
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Vous êtes</Text>
-          <View style={styles.roleSelector}>
-            <TouchableOpacity
-              style={[styles.roleOption, role === 'DRIVER' && styles.roleOptionActive]}
-              onPress={() => setRole('DRIVER')}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.roleOptionIcon]}>🚌</Text>
-              <Text style={[styles.roleOptionText, role === 'DRIVER' && styles.roleOptionTextActive]}>
-                Chauffeur
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.roleOption, role === 'PARENT' && styles.roleOptionActive, role === 'PARENT' && styles.roleOptionActiveParent]}
-              onPress={() => setRole('PARENT')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.roleOptionIcon}>👨‍👩‍👦</Text>
-              <Text style={[styles.roleOptionText, role === 'PARENT' && styles.roleOptionTextActive]}>
-                Parent
-              </Text>
-            </TouchableOpacity>
-          </View>
         </View>
 
         {/* ─── Phone ─── */}
@@ -169,7 +127,6 @@ export default function LoginScreen(props: Readonly<LoginScreenProps>) {
         <TouchableOpacity
           style={[
             styles.loginButton,
-            role === 'PARENT' && styles.loginButtonParent,
             loading && { opacity: 0.7 },
           ]}
           onPress={handleLogin}
@@ -349,45 +306,5 @@ const styles = StyleSheet.create({
     color: '#14b8a6',
     fontWeight: '600',
     textDecorationLine: 'underline',
-  },
-  roleSelector: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  roleOption: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#f8fafc',
-  },
-  roleOptionActive: {
-    borderColor: '#14b8a6',
-    backgroundColor: '#f0fdfa',
-  },
-  roleOptionActiveParent: {
-    borderColor: '#8b5cf6',
-    backgroundColor: '#faf5ff',
-  },
-  roleOptionIcon: {
-    fontSize: 20,
-  },
-  roleOptionText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#9ca3af',
-  },
-  roleOptionTextActive: {
-    color: '#1e293b',
-  },
-  loginButtonParent: {
-    backgroundColor: '#8b5cf6',
-    borderColor: '#a78bfa',
-    ...platformShadow('#8b5cf6', 6, 0.4, 12, 8),
   },
 });
