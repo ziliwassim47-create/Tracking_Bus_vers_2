@@ -5,12 +5,12 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useParent, Child } from '../../context/ParentContext';
 import ParentBottomNav from '../../components/ParentBottomNav';
 import { platformShadow } from '../../styles/platformStyles';
+import { confirmLogout } from '../../utils/logout';
 
 type RootStackParamList = {
   ParentHome: undefined;
@@ -90,18 +90,9 @@ export default function ParentProfileScreen(props: Readonly<Props>) {
   const { user, children } = useParent();
 
   function handleLogout() {
-    Alert.alert(
-      'Déconnexion',
-      'Voulez-vous vraiment vous déconnecter ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Déconnecter',
-          style: 'destructive',
-          onPress: () => navigation.replace('Login'),
-        },
-      ]
-    );
+    confirmLogout(() => {
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    });
   }
 
   return (

@@ -5,6 +5,7 @@ import { io, Socket } from "socket.io-client";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { GOMAPS_API_KEY, SERVER_URL } from "../config";
 import { platformShadow, platformTextShadow } from "../styles/platformStyles";
+import { confirmLogout } from "../utils/logout";
 
 type Coordinate = {
   latitude: number;
@@ -136,11 +137,25 @@ console.log(" 🚌🚌🚙🚙 Commencer le partage")
       });
   };
 
+  const handleLogout = () => {
+    confirmLogout(() => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      socket?.disconnect();
+      navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+    });
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.headerContainer}>
         <Text style={styles.header}>🚍 Bus Tracker</Text>
         <Text style={styles.subtitle}>Partage de localisation</Text>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
+          <Text style={styles.logoutButtonText}>🚪 Se déconnecter</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.inputContainer}>
@@ -202,6 +217,21 @@ const styles = StyleSheet.create({
     color: "#ccfbf1",
     fontWeight: "500",
     opacity: 0.95,
+  },
+  logoutButton: {
+    alignSelf: "center",
+    marginTop: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.45)",
+  },
+  logoutButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
   },
   inputContainer: {
     marginHorizontal: 20,

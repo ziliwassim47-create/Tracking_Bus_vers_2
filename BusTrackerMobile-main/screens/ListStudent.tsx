@@ -5,6 +5,7 @@ import { Table, TableWrapper, Cell } from 'react-native-table-component';
 import { Picker } from "@react-native-picker/picker";
 import { API_BASE_URL } from "../config";
 import { platformShadow, platformTextShadow } from "../styles/platformStyles";
+import { confirmLogout } from "../utils/logout";
 
 type RootStackParamList = {
   Login: any;
@@ -116,6 +117,12 @@ export default function Track({  route,navigation }: ListScreenProps) {
     setUsers(updatedUsers);
   };
 
+  const handleLogout = () => {
+    confirmLogout(() => {
+      navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+    });
+  };
+
   const renderPresence = (present: boolean, index: number) => (
     <TouchableOpacity
       key={index}
@@ -134,6 +141,9 @@ export default function Track({  route,navigation }: ListScreenProps) {
       <View style={styles.headerContainer}>
         <Text style={styles.header}>🚍 Bus Tracker</Text>
         <Text style={styles.subtitle}>Gestion des présences</Text>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
+          <Text style={styles.logoutButtonText}>🚪 Se déconnecter</Text>
+        </TouchableOpacity>
       </View>
      
       <View style={styles.pickerContainer}>
@@ -181,7 +191,7 @@ export default function Track({  route,navigation }: ListScreenProps) {
                 </TableWrapper>
                 {users.map((student, index) => {
                   return (
-                    <TableWrapper key={student.ID} style={index % 2 === 0 ? [styles.tableRow, styles.tableRowEven] : styles.tableRow}>
+                    <TableWrapper key={student.ID} style={index % 2 === 0 ? StyleSheet.flatten([styles.tableRow, styles.tableRowEven]) : styles.tableRow}>
                       <Cell 
                         data={student.NOM} 
                         textStyle={styles.tableCellText} 
@@ -254,6 +264,21 @@ const styles = StyleSheet.create({
     color: "#ccfbf1",
     fontWeight: "500",
     opacity: 0.95,
+  },
+  logoutButton: {
+    alignSelf: "center",
+    marginTop: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.45)",
+  },
+  logoutButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
   },
   pickerContainer: { 
     marginHorizontal: 20,
