@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { URL } = require('url');
+const socketIo = require('socket.io');
 const { openDatabase, verifyPassword, hashPassword } = require('./database');
 
 const PORT = Number(process.env.PORT || 9000);
@@ -14,6 +15,7 @@ const sessions = new Map();
 const refreshTokens = new Map();
 const ACCESS_TOKEN_TTL_MS = positiveDuration(process.env.ACCESS_TOKEN_TTL_MS, 15 * 60 * 1000);
 const SESSION_TTL_MS = positiveDuration(process.env.SESSION_TTL_MS, 8 * 60 * 60 * 1000);
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -410,12 +412,129 @@ function validateFields(data, required) {
   return required.filter(field => data[field] === undefined || data[field] === null || data[field] === '');
 }
 
+function parseStopsPayload(payload) {
+  const rawStops = payload && payload.stops;
+  if (rawStops === undefined || rawStops === null || rawStops === '') return [];
+  if (Array.isArray(rawStops)) return rawStops.filter(Boolean);
+  if (typeof rawStops === 'string') {
+    const trimmed = rawStops.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch {
+      return trimmed.split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => {
+          const [name, address = '', latitude, longitude, stopOrder, plannedOffset] = line.split('|').map(part => part.trim());
+          return {
+            name,
+            address,
+            latitude: latitude ? Number(latitude) : null,
+            longitude: longitude ? Number(longitude) : null,
+            stop_order: stopOrder ? Number(stopOrder) : null,
+            planned_offset_min: plannedOffset ? Number(plannedOffset) : null
+          };
+        })
+        .filter(stop => stop.name);
+    }
+  }
+  return [];
+}
+
 async function handleApi(req, res, url) {
   if (req.method === 'OPTIONS') return json(res, 204, {});
   const pathname = url.pathname;
 
   if (req.method === 'GET' && pathname === '/api/health') {
     return json(res, 200, { status: 'ok', database: 'sqlite', time: new Date().toISOString() });
+  }
+
+  // NOUV API Compatibility Routes
+  if (req.method === 'GET' && pathname === '/api/users') {
+    const busFilter = url.searchParams.get('bus') ? parseInt(url.searchParams.get('bus'), 10) : NaN;
+    let sql = `
+      SELECT e.id AS ID, e.prenom || ' ' || e.nom AS NOM,
+             e.latitudeDomicile, e.longitudeDomicile, e.adresseDomicile,
+             u.telephone AS TLF, e.classe AS CLASSE,
+             COALESCE(te.idTrajet, 1) AS ID_BUS,
+             CASE WHEN pe.statut = 'BOARDED' THEN 1 ELSE 0 END AS presence
+      FROM Enfant e
+      JOIN Utilisateur u ON u.id = e.idParent
+      LEFT JOIN TrajetEnfant te ON te.idEnfant = e.id AND te.actif = 1
+      LEFT JOIN PresenceEnfant pe ON pe.idEnfant = e.id AND pe.id IN (
+        SELECT MAX(id) FROM PresenceEnfant GROUP BY idEnfant
+      )
+    `;
+    const params = [];
+    if (!isNaN(busFilter) && busFilter > 0) {
+      sql += ' WHERE te.idTrajet = ?';
+      params.push(busFilter);
+    }
+    sql += ' ORDER BY e.classe, e.nom';
+    const rows = db.prepare(sql).all(...params).map(r => ({
+      ID: r.ID,
+      NOM: r.NOM,
+      VILLE: JSON.stringify({ latitude: r.latitudeDomicile, longitude: r.longitudeDomicile }),
+      TLF: r.TLF,
+      ID_BUS: String(r.ID_BUS),
+      presence: r.presence,
+      CLASSE: r.CLASSE,
+      NIVEAU: r.CLASSE
+    }));
+    return json(res, 200, rows);
+  }
+
+  const userNouvMatch = pathname.match(/^\/api\/user\/(\d+)$/);
+  if (req.method === 'GET' && userNouvMatch) {
+    const enfantId = userNouvMatch[1];
+    const e = db.prepare(`
+      SELECT e.id, e.latitudeDomicile, e.longitudeDomicile, COALESCE(te.idTrajet, 1) AS busId
+      FROM Enfant e
+      LEFT JOIN TrajetEnfant te ON te.idEnfant = e.id AND te.actif = 1
+      WHERE e.id = ?
+    `).get(enfantId);
+    if (!e) return json(res, 404, { message: "Utilisateur non trouvé" });
+    return json(res, 200, {
+      id: String(e.id),
+      bus: String(e.busId),
+      adresse: { latitude: e.latitudeDomicile, longitude: e.longitudeDomicile }
+    });
+  }
+
+  const userAdresseMatch = pathname.match(/^\/api\/userAdresse\/(\d+)$/);
+  if (req.method === 'GET' && userAdresseMatch) {
+    const enfantId = userAdresseMatch[1];
+    const e = db.prepare('SELECT id, latitudeDomicile, longitudeDomicile FROM Enfant WHERE id = ?').get(enfantId);
+    if (!e) return json(res, 404, { message: "Utilisateur non trouvé" });
+    return json(res, 200, {
+      id: String(e.id),
+      adresse: { latitude: e.latitudeDomicile, longitude: e.longitudeDomicile }
+    });
+  }
+
+  const updateUserMatch = pathname.match(/^\/api\/users\/(\d+)$/);
+  if (req.method === 'PUT' && updateUserMatch) {
+    const body = await readBody(req);
+    if (!body.latitude || !body.longitude) return json(res, 400, { error: "Latitude et Longitude sont requises" });
+    db.prepare('UPDATE Enfant SET latitudeDomicile = ?, longitudeDomicile = ?, modifieLe = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(body.latitude, body.longitude, updateUserMatch[1]);
+    return json(res, 200, { message: "Adresse mise à jour avec succès !", adresse: JSON.stringify({ latitude: body.latitude, longitude: body.longitude }) });
+  }
+
+  if (req.method === 'PUT' && pathname === '/api/updateAllPresences') {
+    const students = await readBody(req);
+    if (Array.isArray(students)) {
+      const stmt = db.prepare(`
+        INSERT INTO PresenceEnfant(idExecutionTrajet, idEnfant, statut)
+        VALUES ((SELECT COALESCE(MAX(id), 1) FROM ExecutionTrajet), ?, ?)
+      `);
+      students.forEach(st => {
+        stmt.run(st.id, st.present ? 'BOARDED' : 'ABSENT');
+      });
+    }
+    return json(res, 200, { message: "Présences mises à jour avec succès !" });
   }
 
   if (req.method === 'POST' && pathname === '/api/auth/login') {
@@ -632,6 +751,28 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true, temporaryPassword: body.status === 'APPROVED' ? 'demo1234' : null });
   }
 
+  if (req.method === 'POST' && pathname === '/api/route-students') {
+    if (!requireRole(res, user, ['ADMIN'])) return;
+    const body = await readBody(req);
+    const routeId = Number(body.route_id);
+    const studentId = Number(body.student_id);
+    const stopId = body.stop_id === undefined || body.stop_id === null || body.stop_id === '' ? null : Number(body.stop_id);
+    if (!routeId || !studentId) return json(res, 422, { error: 'route_id et student_id requis' });
+    const route = db.prepare('SELECT id FROM Trajet WHERE id = ?').get(routeId);
+    const student = db.prepare('SELECT id FROM Enfant WHERE id = ? AND actif = 1').get(studentId);
+    if (!route || !student) return json(res, 404, { error: 'Route ou élève introuvable' });
+    const fallbackStop = db.prepare('SELECT id FROM Arret WHERE idTrajet = ? ORDER BY ordreArret, id LIMIT 1').get(routeId);
+    const resolvedStopId = stopId || fallbackStop?.id || null;
+    if (!resolvedStopId) return json(res, 422, { error: 'Aucun arrêt disponible pour cette ligne' });
+    const existing = db.prepare('SELECT idTrajet, idEnfant FROM TrajetEnfant WHERE idTrajet = ? AND idEnfant = ?').get(routeId, studentId);
+    if (existing) {
+      const updateResult = db.prepare('UPDATE TrajetEnfant SET idArret = ?, actif = 1, affecteLe = CURRENT_TIMESTAMP WHERE idTrajet = ? AND idEnfant = ?').run(resolvedStopId, routeId, studentId);
+      return json(res, 200, { ok: true, id: `${routeId}:${studentId}`, updated: updateResult.changes > 0 });
+    }
+    const result = db.prepare('INSERT INTO TrajetEnfant(idTrajet, idEnfant, idArret, actif, affecteLe) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)').run(routeId, studentId, resolvedStopId);
+    return json(res, 201, { id: Number(result.lastInsertRowid) });
+  }
+
   const entityMatch = pathname.match(/^\/api\/(users|students|buses|routes|stops|assignments)(?:\/(\d+))?$/);
   if (entityMatch) {
     const [, entity, rawId] = entityMatch;
@@ -648,16 +789,36 @@ async function handleApi(req, res, url) {
     if (req.method === 'POST') {
       let body = await readBody(req);
       if (config.transform) body = config.transform(body);
-      const missing = validateFields(body, config.required);
+      const stops = entity === 'routes' ? parseStopsPayload(body) : [];
+      const insertPayload = { ...body };
+      delete insertPayload.stops;
+      const missing = validateFields(insertPayload, config.required);
       if (missing.length) return json(res, 422, { error: `Champs requis: ${missing.join(', ')}` });
       const fields = [...config.fields];
       if (entity === 'users') fields.push('password_hash');
-      const used = fields.filter(field => body[field] !== undefined);
+      const used = fields.filter(field => insertPayload[field] !== undefined);
       const placeholders = used.map(() => '?').join(', ');
       const result = db.prepare(`INSERT INTO ${config.table}(${used.map(field => config.columns[field]).join(', ')}) VALUES (${placeholders})`)
-        .run(...used.map(field => body[field]));
+        .run(...used.map(field => insertPayload[field]));
       if (entity === 'users') {
-        db.prepare(`INSERT INTO ${roleTable(body.role)}(id) VALUES (?)`).run(Number(result.lastInsertRowid));
+        db.prepare(`INSERT INTO ${roleTable(insertPayload.role)}(id) VALUES (?)`).run(Number(result.lastInsertRowid));
+      }
+      if (entity === 'routes' && stops.length) {
+        const stopStatement = db.prepare(`
+          INSERT INTO Arret(idTrajet, nom, adresse, latitude, longitude, ordreArret, estimationTemps)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        stops.forEach(stop => {
+          stopStatement.run(
+            Number(result.lastInsertRowid),
+            String(stop.name || '').trim(),
+            String(stop.address || '').trim(),
+            stop.latitude ?? null,
+            stop.longitude ?? null,
+            stop.stop_order ?? null,
+            stop.planned_offset_min ?? null
+          );
+        });
       }
       return json(res, 201, { id: Number(result.lastInsertRowid) });
     }
@@ -731,9 +892,36 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+const io = socketIo(server, {
+  cors: { origin: "*" }
+});
+
+io.on("connection", (socket) => {
+  console.log("✅ Client WebSocket connecté :", socket.id);
+
+  socket.on("busLocationUpdate", (data) => {
+    console.log("📩 busLocationUpdate :", data);
+    io.emit("busLocationUpdate", data);
+  });
+
+  socket.on("busId", (data) => {
+    console.log("🔑 busId :", data);
+    io.emit("busId", data);
+  });
+
+  socket.on("busLocationStart", (data) => {
+    console.log("🚌 busLocationStart :", data);
+    io.emit("busLocationStart", data);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("❌ Client WebSocket déconnecté :", socket.id);
+  });
+});
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Tracking Bus disponible sur http://localhost:${PORT}`);
-  console.log(`API et SQLite actifs. Arrêter le serveur : Ctrl + C`);
+  console.log(`API, WebSocket (Socket.IO) et SQLite actifs.`);
 });
 
 function shutdown() {

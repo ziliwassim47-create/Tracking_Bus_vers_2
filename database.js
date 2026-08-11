@@ -199,44 +199,90 @@ function seedDatabase(db) {
     insertUser(db, 'DRIVER', 'Nabil', 'Jaziri', 'nabil@demo.tn', '+216 20 600 600');
     insertUser(db, 'ASSISTANT', 'Ines', 'Ayari', 'ines@demo.tn', '+216 20 700 700');
 
-    const etablissementId = Number(db.prepare('INSERT INTO Etablissement(nom) VALUES (?)').run('École Les Jasmins').lastInsertRowid);
-    const enfantStmt = db.prepare(`
-      INSERT INTO Enfant(idParent, prenom, nom, dateNaissance, classe, adresseDomicile,
+    // Additional parents for nouv students
+    const parentBenSalah = insertUser(db, 'PARENT', 'Parent', 'Ben Salah', 'bensalah@demo.tn', '20111222');
+    const parentTrabelsi = insertUser(db, 'PARENT', 'Parent', 'Trabelsi', 'trabelsi@demo.tn', '22334455');
+    const parentKarray = insertUser(db, 'PARENT', 'Parent', 'Karray', 'karray@demo.tn', '99887766');
+    const parentChaabane = insertUser(db, 'PARENT', 'Parent', 'Chaabane', 'chaabane@demo.tn', '55443322');
+    const parentBouzid = insertUser(db, 'PARENT', 'Parent', 'Bouzid', 'bouzid@demo.tn', '44556677');
+    const parentHachicha = insertUser(db, 'PARENT', 'Parent', 'Hachicha', 'hachicha@demo.tn', '66778899');
+
+    const etablissementId = Number(db.prepare('INSERT INTO Etablissement(nom) VALUES (?)').run('École Educanet').lastInsertRowid);
+    
+    // Buses
+    const busStmt = db.prepare('INSERT INTO Bus(id, matricule, libelle, capacite, statut, identifiantGPS) VALUES (?, ?, ?, ?, ?, ?)');
+    const busAId = 1;
+    busStmt.run(1, '123 TU 456', 'Bus 01', 32, 'IN_SERVICE', 'GPS-EDU-001');
+    busStmt.run(2, '789 TU 111', 'Bus 02', 28, 'IN_SERVICE', 'GPS-EDU-002');
+    busStmt.run(3, '555 TU 777', 'Bus 03', 36, 'AVAILABLE', 'GPS-EDU-003');
+    busStmt.run(4, '205 TU 998', 'Bus 04', 30, 'MAINTENANCE', 'GPS-EDU-004');
+
+    // Students from default setup plus NOUV students (IDs 3..8)
+    const enfantStmtWithId = db.prepare(`
+      INSERT INTO Enfant(id, idParent, prenom, nom, dateNaissance, classe, adresseDomicile,
         latitudeDomicile, longitudeDomicile, rayonAlerteM, idEtablissement)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    const youssefId = Number(enfantStmt.run(parentId, 'Youssef', 'Ben Ali', '2015-04-12', '6e A', 'Maison Youssef, Tunis', 36.8067, 10.1815, 500, etablissementId).lastInsertRowid);
-    const amineId = Number(enfantStmt.run(parentId, 'Amine', 'Ben Ali', '2017-09-21', '4e B', 'Maison Youssef, Tunis', 36.8067, 10.1815, 500, etablissementId).lastInsertRowid);
-    const linaId = Number(enfantStmt.run(parentId, 'Lina', 'Ben Ali', '2019-01-08', '2e A', 'Maison Youssef, Tunis', 36.8067, 10.1815, 500, etablissementId).lastInsertRowid);
+    
+    enfantStmtWithId.run(1, parentId, 'Youssef', 'Ben Ali', '2015-04-12', '6e A', 'Maison Youssef, Tunis', 36.8067, 10.1815, 500, etablissementId);
+    enfantStmtWithId.run(2, parentId, 'Amine', 'Ben Ali', '2017-09-21', '4e B', 'Maison Youssef, Tunis', 36.8067, 10.1815, 500, etablissementId);
+    enfantStmtWithId.run(9, parentId, 'Lina', 'Ben Ali', '2019-01-08', '2e A', 'Maison Youssef, Tunis', 36.8067, 10.1815, 500, etablissementId);
 
-    const busStmt = db.prepare('INSERT INTO Bus(matricule, libelle, capacite, statut, identifiantGPS) VALUES (?, ?, ?, ?, ?)');
-    const busAId = Number(busStmt.run('123 TU 456', 'Bus 01', 32, 'IN_SERVICE', 'GPS-EDU-001').lastInsertRowid);
-    busStmt.run('789 TU 111', 'Bus 02', 28, 'IN_SERVICE', 'GPS-EDU-002');
-    busStmt.run('555 TU 777', 'Bus 03', 36, 'AVAILABLE', 'GPS-EDU-003');
-    busStmt.run('205 TU 998', 'Bus 04', 30, 'MAINTENANCE', 'GPS-EDU-004');
+    // nouv dataset students (IDs 3, 4, 5, 6, 7, 8)
+    enfantStmtWithId.run(3, parentBenSalah, 'Ahmed', 'Ben Salah', '2016-05-10', 'Papillon', '{"latitude": 36.81, "longitude": 10.17}', 36.81, 10.17, 500, etablissementId);
+    enfantStmtWithId.run(4, parentTrabelsi, 'Yassine', 'Trabelsi', '2016-08-15', 'Papillon', '{"latitude": 36.82, "longitude": 10.18}', 36.82, 10.18, 500, etablissementId);
+    enfantStmtWithId.run(5, parentKarray, 'Mariam', 'Karray', '2013-03-20', 'Rose', '{"latitude": 36.79, "longitude": 10.20}', 36.79, 10.20, 500, etablissementId);
+    enfantStmtWithId.run(6, parentChaabane, 'Ines', 'Chaabane', '2013-11-12', 'Rose', '{"latitude": 36.78, "longitude": 10.22}', 36.78, 10.22, 500, etablissementId);
+    enfantStmtWithId.run(7, parentBouzid, 'Ali', 'Bouzid', '2009-01-25', 'Tulipe', '{"latitude": 36.75, "longitude": 10.25}', 36.75, 10.25, 500, etablissementId);
+    enfantStmtWithId.run(8, parentHachicha, 'Sami', 'Hachicha', '2009-07-04', 'Tulipe', '{"latitude": 36.74, "longitude": 10.26}', 36.74, 10.26, 500, etablissementId);
 
+    // Routes (Trajet)
     const trajetStmt = db.prepare(`
-      INSERT INTO Trajet(code, nomTrajet, origine, destination, heureMatin, heureApresMidi, tempsTotalEstime)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO Trajet(id, code, nomTrajet, origine, destination, heureMatin, heureApresMidi, tempsTotalEstime)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    const routeAId = Number(trajetStmt.run('A', 'Ligne A', 'Dépôt EDUCAnet', 'École Les Jasmins', '07:30', '16:30', 30).lastInsertRowid);
-    trajetStmt.run('B', 'Ligne B', 'Dépôt Nord', 'École El Amal', '07:20', '16:20', 35);
-    trajetStmt.run('C', 'Ligne C', 'Dépôt Sud', 'École La Réussite', '07:40', '16:40', 25);
+    const routeAId = 1;
+    trajetStmt.run(1, 'A', 'Ligne 1 - Papillon', 'Dépôt EDUCAnet', 'École Educanet', '07:30', '16:30', 30);
+    trajetStmt.run(2, 'B', 'Ligne 2 - Rose', 'Dépôt Nord', 'École Educanet', '07:20', '16:20', 35);
+    trajetStmt.run(3, 'C', 'Ligne 3 - Tulipe', 'Dépôt Sud', 'École Educanet', '07:40', '16:40', 25);
 
+    // Stops (Arret)
     const arretStmt = db.prepare(`
       INSERT INTO Arret(idTrajet, nom, adresse, latitude, longitude, ordreArret, estimationTemps)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
-    const stopIds = [
-      Number(arretStmt.run(routeAId, 'Dépôt', 'Dépôt EDUCAnet', 36.8126, 10.1762, 0, 0).lastInsertRowid),
-      Number(arretStmt.run(routeAId, 'Pharmacie', 'Avenue de Paris', 36.8098, 10.1784, 1, 7).lastInsertRowid),
-      Number(arretStmt.run(routeAId, 'Maison Youssef', 'Rue des Écoles', 36.8067, 10.1815, 2, 14).lastInsertRowid),
-      Number(arretStmt.run(routeAId, 'Jardin', 'Jardin du Belvédère', 36.8111, 10.1848, 3, 21).lastInsertRowid),
-      Number(arretStmt.run(routeAId, 'École', 'École Les Jasmins', 36.8151, 10.1886, 4, 30).lastInsertRowid)
+    const routeAStopIds = [
+      Number(arretStmt.run(1, 'Dépôt', 'Dépôt EDUCAnet', 36.8126, 10.1762, 0, 0).lastInsertRowid),
+      Number(arretStmt.run(1, 'Pharmacie', 'Avenue de Paris', 36.8098, 10.1784, 1, 7).lastInsertRowid),
+      Number(arretStmt.run(1, 'Arrêt Ahmed Ben Salah', 'Tunis 36.81/10.17', 36.8100, 10.1700, 2, 14).lastInsertRowid),
+      Number(arretStmt.run(1, 'Jardin', 'Jardin du Belvédère', 36.8111, 10.1848, 3, 21).lastInsertRowid),
+      Number(arretStmt.run(1, 'École Educanet', 'École Educanet', 36.8151, 10.1886, 4, 30).lastInsertRowid)
+    ];
+
+    const routeBStopIds = [
+      Number(arretStmt.run(2, 'Dépôt Nord', 'Dépôt Nord', 36.8000, 10.1900, 0, 0).lastInsertRowid),
+      Number(arretStmt.run(2, 'Arrêt Mariam Karray', 'Tunis 36.79/10.20', 36.7900, 10.2000, 1, 10).lastInsertRowid),
+      Number(arretStmt.run(2, 'Arrêt Ines Chaabane', 'Tunis 36.78/10.22', 36.7800, 10.2200, 2, 20).lastInsertRowid),
+      Number(arretStmt.run(2, 'École Educanet', 'École Educanet', 36.8151, 10.1886, 3, 35).lastInsertRowid)
+    ];
+
+    const routeCStopIds = [
+      Number(arretStmt.run(3, 'Dépôt Sud', 'Dépôt Sud', 36.7600, 10.2400, 0, 0).lastInsertRowid),
+      Number(arretStmt.run(3, 'Arrêt Ali Bouzid', 'Tunis 36.75/10.25', 36.7500, 10.2500, 1, 10).lastInsertRowid),
+      Number(arretStmt.run(3, 'Arrêt Sami Hachicha', 'Tunis 36.74/10.26', 36.7400, 10.2600, 2, 20).lastInsertRowid),
+      Number(arretStmt.run(3, 'École Educanet', 'École Educanet', 36.8151, 10.1886, 3, 25).lastInsertRowid)
     ];
 
     const trajetEnfantStmt = db.prepare('INSERT INTO TrajetEnfant(idTrajet, idEnfant, idArret) VALUES (?, ?, ?)');
-    [youssefId, amineId, linaId].forEach(studentId => trajetEnfantStmt.run(routeAId, studentId, stopIds[2]));
+    trajetEnfantStmt.run(1, 1, routeAStopIds[2]);
+    trajetEnfantStmt.run(1, 2, routeAStopIds[2]);
+    trajetEnfantStmt.run(1, 9, routeAStopIds[2]);
+    trajetEnfantStmt.run(1, 3, routeAStopIds[2]);
+    trajetEnfantStmt.run(1, 4, routeAStopIds[3]);
+    trajetEnfantStmt.run(2, 5, routeBStopIds[1]);
+    trajetEnfantStmt.run(2, 6, routeBStopIds[2]);
+    trajetEnfantStmt.run(3, 7, routeCStopIds[1]);
+    trajetEnfantStmt.run(3, 8, routeCStopIds[2]);
 
     db.prepare(`
       INSERT INTO Affectation(idTrajet, idBus, idChauffeur, idAssistante, debutLe)
@@ -253,23 +299,16 @@ function seedDatabase(db) {
       new Date(Date.now() - 35 * 60000).toISOString(), new Date(Date.now() - 31 * 60000).toISOString(), 4
     ).lastInsertRowid);
 
-    const historiqueStmt = db.prepare(`
-      INSERT INTO ExecutionTrajet(idTrajet, idBus, idChauffeur, idAssistante, sens, statut,
-        departPrevuLe, departReelLe, finReelleLe, retardMinutes)
-      VALUES (?, ?, ?, ?, ?, 'COMPLETED', ?, ?, ?, ?)
-    `);
-    historiqueStmt.run(routeAId, busAId, driverId, assistantId, 'AFTERNOON',
-      new Date(Date.now() - 86400000).toISOString(), new Date(Date.now() - 86400000 + 120000).toISOString(), new Date(Date.now() - 86400000 + 22 * 60000).toISOString(), 0);
-    historiqueStmt.run(routeAId, busAId, driverId, assistantId, 'MORNING',
-      new Date(Date.now() - 3 * 86400000).toISOString(), new Date(Date.now() - 3 * 86400000 + 10 * 60000).toISOString(), new Date(Date.now() - 3 * 86400000 + 33 * 60000).toISOString(), 12);
-
     const arretExecutionStmt = db.prepare('INSERT INTO ArretExecution(idExecutionTrajet, idArret, statut) VALUES (?, ?, ?)');
-    stopIds.forEach((stopId, index) => arretExecutionStmt.run(currentTripId, stopId, index < 2 ? 'PASSED' : index === 2 ? 'APPROACHING' : 'UPCOMING'));
+    routeAStopIds.forEach((stopId, index) => arretExecutionStmt.run(currentTripId, stopId, index < 2 ? 'PASSED' : index === 2 ? 'APPROACHING' : 'UPCOMING'));
 
     const presenceStmt = db.prepare('INSERT INTO PresenceEnfant(idExecutionTrajet, idEnfant, statut, enregistrePar) VALUES (?, ?, ?, ?)');
-    presenceStmt.run(currentTripId, youssefId, 'WAITING', assistantId);
-    presenceStmt.run(currentTripId, amineId, 'BOARDED', assistantId);
-    presenceStmt.run(currentTripId, linaId, 'WAITING', assistantId);
+    presenceStmt.run(currentTripId, 3, 'BOARDED', assistantId);
+    presenceStmt.run(currentTripId, 4, 'WAITING', assistantId);
+    presenceStmt.run(currentTripId, 5, 'BOARDED', assistantId);
+    presenceStmt.run(currentTripId, 6, 'WAITING', assistantId);
+    presenceStmt.run(currentTripId, 7, 'BOARDED', assistantId);
+    presenceStmt.run(currentTripId, 8, 'WAITING', assistantId);
 
     db.prepare(`
       INSERT INTO PositionGPS(idBus, idExecutionTrajet, latitude, longitude, vitesseKmh, direction, precisionM, enregistreLe)
@@ -280,7 +319,7 @@ function seedDatabase(db) {
       INSERT INTO Notification(idUtilisateur, idExecutionTrajet, type, titre, message, creeLe)
       VALUES (?, ?, ?, ?, ?, ?)
     `);
-    notificationStmt.run(parentId, currentTripId, 'APPROACH', 'Bus en approche', 'Le bus de Youssef arrive dans environ 7 minutes.', new Date(Date.now() - 5 * 60000).toISOString());
+    notificationStmt.run(parentId, currentTripId, 'APPROACH', 'Bus en approche', 'Le bus de Youssef / Ahmed arrive dans environ 7 minutes.', new Date(Date.now() - 5 * 60000).toISOString());
     notificationStmt.run(parentId, currentTripId, 'DELAY', 'Retard signalé', 'La Ligne A présente un retard estimé à 4 minutes.', new Date(Date.now() - 24 * 60000).toISOString());
     notificationStmt.run(assistantId, currentTripId, 'TRIP_STARTED', 'Trajet démarré', 'Le trajet du matin est maintenant en cours.', new Date(Date.now() - 31 * 60000).toISOString());
     notificationStmt.run(adminId, currentTripId, 'INCIDENT', 'Incident à vérifier', 'Un parent a signalé un retard sur la Ligne A.', new Date(Date.now() - 18 * 60000).toISOString());

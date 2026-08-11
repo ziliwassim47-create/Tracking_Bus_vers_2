@@ -1,4 +1,8 @@
 node_modules/
+**/.env
+**/build/
+**/.expo/
+**/coverage/
 platforms/
 plugins/
 www/cordova.js

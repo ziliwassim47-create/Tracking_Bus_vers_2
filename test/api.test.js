@@ -183,6 +183,61 @@ test('API métier et persistance SQLite', async t => {
   }, admin.token);
   assert.equal(busResult.response.status, 201);
 
+  const routeWithStops = await request('/routes', {
+    method: 'POST',
+    body: JSON.stringify({
+      code: 'TEST',
+      name: 'Ligne test',
+      origin: 'Départ test',
+      destination: 'Arrivée test',
+      morning_time: '07:15',
+      afternoon_time: '16:15',
+      stops: [
+        { name: 'Arrêt A', address: 'Rue A', latitude: 36.8, longitude: 10.1, stop_order: 1, planned_offset_min: 0 },
+        { name: 'Arrêt B', address: 'Rue B', latitude: 36.81, longitude: 10.11, stop_order: 2, planned_offset_min: 8 }
+      ]
+    })
+  }, admin.token);
+  assert.equal(routeWithStops.response.status, 201);
+  assert.ok(routeWithStops.payload.id > 0);
+
+  const stopsList = await request('/stops', {}, admin.token);
+  assert.equal(stopsList.response.status, 200);
+  const createdStops = stopsList.payload.filter(item => item.route_id === routeWithStops.payload.id);
+  assert.equal(createdStops.length, 2);
+  assert.ok(createdStops.some(item => item.name === 'Arrêt A'));
+  assert.ok(createdStops.some(item => item.name === 'Arrêt B'));
+
+  const createdUser = await request('/users', {
+    method: 'POST',
+    body: JSON.stringify({
+      role: 'PARENT',
+      first_name: 'À',
+      last_name: 'Supprimer',
+      email: 'delete.me@test.tn',
+      phone: '+216 99 999 999',
+      password_hash: 'demo1234'
+    })
+  }, admin.token);
+  assert.equal(createdUser.response.status, 201);
+
+  const deletedUser = await request(`/users/${createdUser.payload.id}`, { method: 'DELETE' }, admin.token);
+  assert.equal(deletedUser.response.status, 200);
+
+  const deletedUserCheck = await request(`/users/${createdUser.payload.id}`, {}, admin.token);
+  assert.equal(deletedUserCheck.response.status, 200);
+  assert.equal(deletedUserCheck.payload.active, 0);
+
+  const assignedStudent = await request('/route-students', {
+    method: 'POST',
+    body: JSON.stringify({
+      route_id: routeWithStops.payload.id,
+      student_id: parentBootstrap.payload.students[0].id,
+      stop_id: createdStops[0].id
+    })
+  }, admin.token);
+  assert.equal(assignedStudent.response.status, 201);
+
   const registration = await request('/auth/register', {
     method: 'POST',
     body: JSON.stringify({

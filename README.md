@@ -14,6 +14,13 @@ dans la pile existante HTML/CSS/JavaScript, sans imposer React à l'application 
 - suivi GPS via `navigator.geolocation` et carte OpenStreetMap;
 - mode PWA avec cache des ressources, sans mise en cache des réponses API.
 
+Le dépôt regroupe également les applications complémentaires :
+
+- `BusTrackerAdmin-main` : portail React d'administration ;
+- `BusTrackerFront-end-main` : espace Parent React ;
+- `BusTrackerMobile-main` : application mobile Expo/React Native ;
+- `BusTrackerBack-main` : ancien backend MySQL, conservé pour compatibilité.
+
 Le modèle relationnel détaillé se trouve dans
 [`database/model.md`](database/model.md) et le schéma exécutable dans
 [`database/schema.sql`](database/schema.sql).
@@ -30,6 +37,33 @@ npm.cmd start
 ```
 
 Ouvrir <http://localhost:9000>.
+
+### Administration React
+
+Installer les dépendances une première fois :
+
+```bat
+npm.cmd install
+npm.cmd --prefix BusTrackerAdmin-main install
+```
+
+Puis lancer simultanément l'API et le portail Admin :
+
+```bat
+npm.cmd run start:admin
+```
+
+Ouvrir <http://localhost:3002>. Cette commande démarre aussi l'API attendue sur
+<http://localhost:9000> et évite les erreurs `ERR_CONNECTION_REFUSED`.
+
+### Espace Parent React
+
+```bat
+npm.cmd --prefix BusTrackerFront-end-main install
+npm.cmd run start:parent
+```
+
+Ouvrir <http://localhost:3000>.
 
 La base est créée dans `data/tracking-bus.sqlite`. Pour la réinitialiser:
 

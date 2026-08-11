@@ -8,20 +8,33 @@
   modernStyles.href = assetBase + 'app.css';
   document.head.appendChild(modernStyles);
 
+  function loadStyle(href) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    document.head.appendChild(link);
+  }
+
+  loadStyle('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+  loadStyle('https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css');
+
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = resolve; // Continue even if optional load fails
+      document.head.appendChild(s);
+    });
+  }
+
   function loadApplication() {
-    const reactScript = document.createElement('script');
-    reactScript.src = 'https://unpkg.com/react@18/umd/react.development.js';
-    reactScript.onload = function () {
-      const reactDomScript = document.createElement('script');
-      reactDomScript.src = 'https://unpkg.com/react-dom@18/umd/react-dom.development.js';
-      reactDomScript.onload = function () {
-        const appScript = document.createElement('script');
-        appScript.src = assetBase + 'app.js';
-        document.head.appendChild(appScript);
-      };
-      document.head.appendChild(reactDomScript);
-    };
-    document.head.appendChild(reactScript);
+    loadScript('https://unpkg.com/react@18/umd/react.development.js')
+      .then(function () { return loadScript('https://unpkg.com/react-dom@18/umd/react-dom.development.js'); })
+      .then(function () { return loadScript('https://cdn.socket.io/4.7.5/socket.io.min.js'); })
+      .then(function () { return loadScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'); })
+      .then(function () { return loadScript('https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js'); })
+      .then(function () { return loadScript(assetBase + 'app.js'); });
   }
 
   if (location.protocol === 'file:') {

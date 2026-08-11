@@ -1,0 +1,18 @@
+{
+  "build": {
+    "development": {
+      "releaseChannel": "default",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "releaseChannel": "production",
+      "distribution": "store",
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  }
+}

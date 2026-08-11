@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "SchoolBusTracker",
+    "slug": "SchoolBusTracker",
+    "newArchEnabled": false,
+    "version": "1.0.0",
+    "plugins": [
+      "./app.plugin.js"
+    ],
+    "android": {
+      "package": "com.ons_abderrazek.SchoolBusTracker",
+      "permissions": [
+        "INTERNET",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+   
+    },
+    "extra": {
+      "eas": {
+        "projectId": "081e9599-4993-4f35-8561-67a22ce9b8ca"
+      },
+      "backendUrl": "http://51.91.249.6:4321"
+    },
+    "owner": "ons_abderrazek98"
+  }
+}

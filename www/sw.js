@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tracking-bus-v6';
+const CACHE_NAME = 'tracking-bus-v7';
 const APP_FILES = [
   "/administration/accueil.html",
   "/administration/affecter-assistantes.html",
@@ -26,6 +26,7 @@ const APP_FILES = [
   "/assets/educanet-logo.png",
   "/assets/app.css",
   "/assets/app.js",
+  "/assets/react-app.js",
     "/assets/hybrid.css",
     "/assets/hybrid.js",
     "/assets/icons/arrow-left.png",
@@ -107,11 +108,25 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.pathname.startsWith('/api/')) return;
-  event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
+
+  event.respondWith((async () => {
+    const cached = await caches.match(event.request);
+    if (cached) return cached;
+
+    try {
+      const response = await fetch(event.request);
+      if (!response || response.type === 'error') {
+        throw new Error('Fetch failed');
+      }
       const copy = response.clone();
       caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
       return response;
-    }).catch(() => event.request.mode === 'navigate' ? caches.match('/index.html') : cached))
-  );
+    } catch (error) {
+      if (event.request.mode === 'navigate') {
+        const page = await caches.match('/index.html');
+        return page || Response.error();
+      }
+      return cached || Response.error();
+    }
+  })());
 });

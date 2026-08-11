@@ -179,18 +179,28 @@
     const headers = { 'Content-Type': 'application/json', ...(options && options.headers) };
     const token = localStorage.getItem(tokenKey);
     if (token) headers.Authorization = `Bearer ${token}`;
-    const response = await fetch(`${apiBase}${endpoint}`, { ...options, headers });
-    const payload = response.status === 204 ? {} : await response.json();
-    if (!response.ok) {
-      if (response.status === 401 && retry && !isPublicAuth && localStorage.getItem(refreshTokenKey)) {
-        await refreshSession();
-        return api(endpoint, options, false);
+
+    try {
+      const response = await fetch(`${apiBase}${endpoint}`, { ...options, headers });
+      const payload = response.status === 204 ? {} : await response.json();
+      if (!response.ok) {
+        if (response.status === 401 && retry && !isPublicAuth && localStorage.getItem(refreshTokenKey)) {
+          await refreshSession();
+          return api(endpoint, options, false);
+        }
+        const error = new Error(payload.error || 'Erreur de communication');
+        error.status = response.status;
+        throw error;
       }
-      const error = new Error(payload.error || 'Erreur de communication');
-      error.status = response.status;
+      return payload;
+    } catch (error) {
+      if (error instanceof Error && /Failed to fetch|ERR_CONNECTION_REFUSED|ECONNREFUSED|fetch/i.test(error.message)) {
+        const networkError = new Error('Le serveur local n’est pas disponible. Démarrez-le avec npm start puis réessayez.');
+        networkError.status = 0;
+        throw networkError;
+      }
       throw error;
     }
-    return payload;
   }
 
   function isAuthPage() {
@@ -472,34 +482,261 @@
       </div>`;
   }
 
+  function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const rad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * rad;
+    const dLon = (lon2 - lon1) * rad;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  let currentMapInstance = null;
+  let currentSocketInstance = null;
+
   function mapPage() {
-    const position = data.latestPosition || { latitude: 36.8081, longitude: 10.1801, speed_kmh: 0 };
-    const delta = 0.012;
-    const bbox = [
-      position.longitude - delta,
-      position.latitude - delta,
-      position.longitude + delta,
-      position.latitude + delta
-    ].join(',');
-    const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${position.latitude}%2C${position.longitude}`;
     const trip = data.currentTrip;
+
+    // Determine target student stop (e.g. active child for parent or first student)
+    let studentLat = 36.8100;
+    let studentLng = 10.1700;
+    let studentName = 'Arrêt Élève';
+
+    if (data.students && data.students.length > 0) {
+      const selectedStudent = (data.user.role === 'PARENT' && state.selectedStudentId)
+        ? data.students.find(s => s.id === Number(state.selectedStudentId)) || data.students[0]
+        : data.students[0];
+      if (selectedStudent) {
+        studentLat = selectedStudent.home_lat || 36.8100;
+        studentLng = selectedStudent.home_lng || 10.1700;
+        studentName = `${selectedStudent.first_name} ${selectedStudent.last_name}`;
+      }
+    }
+
+    const busPos = data.latestPosition || { latitude: 36.8126, longitude: 10.1762, speed_kmh: 0 };
+    const busLat = busPos.latitude;
+    const busLng = busPos.longitude;
+
+    const initialDistance = getDistance(busLat, busLng, studentLat, studentLng);
+    const initialEta = Math.max(1, Math.round(initialDistance / 400));
+
     shell(`
       <h1 class="tb-title">Carte en direct</h1>
       <p class="tb-subtitle">${trip ? `${escapeHtml(trip.route_name)} · ${escapeHtml(trip.registration)}` : 'Position non affectée'}</p>
       ${data.user.role === 'PARENT' ? childSwitcher() : ''}
-      <div class="tb-map" style="margin-top:15px">
-        <iframe src="${mapUrl}" title="Position du bus sur OpenStreetMap" loading="lazy"></iframe>
-        <span class="tb-map-overlay">${badge(trip ? trip.status : 'PLANNED', trip && trip.status === 'IN_PROGRESS' ? 'En approche' : undefined)}</span>
+      <div class="tb-map" style="margin-top:15px; position:relative; overflow:hidden;">
+        <div id="tb-leaflet-container" style="height: 380px; width: 100%; border-radius: 14px; background: #e5e3df; z-index: 1;"></div>
+        <span class="tb-map-overlay" style="z-index: 10;">${badge(trip ? trip.status : 'PLANNED', trip && trip.status === 'IN_PROGRESS' ? 'En approche' : undefined)}</span>
       </div>
       <div class="tb-map-sheet">
         <strong class="tb-row-title">${trip ? `${escapeHtml(trip.route_name)} · ${escapeHtml(trip.registration)}` : 'Bus scolaire'}</strong>
         <div class="tb-map-metrics">
-          <div class="tb-map-metric"><span>Distance arrêt</span><strong>850 m</strong></div>
-          <div class="tb-map-metric"><span>ETA</span><strong>7 min</strong></div>
-          <div class="tb-map-metric"><span>Vitesse</span><strong>${Math.round(position.speed_kmh || 0)} km/h</strong></div>
+          <div class="tb-map-metric"><span>Distance arrêt</span><strong id="metric-distance">${initialDistance < 1000 ? Math.round(initialDistance) + ' m' : (initialDistance / 1000).toFixed(1) + ' km'}</strong></div>
+          <div class="tb-map-metric"><span>ETA</span><strong id="metric-eta">${initialEta} min</strong></div>
+          <div class="tb-map-metric"><span>Vitesse</span><strong id="metric-speed">${Math.round(busPos.speed_kmh || 0)} km/h</strong></div>
         </div>
+        <button class="tb-button" type="button" id="btn-start-simulation" style="margin-bottom: 8px; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; font-weight: bold;">
+          ${icon('play')} Démarrer le déplacement en direct
+        </button>
         <button class="tb-button" type="button" data-action="share">${icon('share-2')} Partager le suivi</button>
       </div>`);
+
+    // Clean up previous socket/map/simulation if re-rendered
+    if (window.activeSimulationInterval) {
+      clearInterval(window.activeSimulationInterval);
+      window.activeSimulationInterval = null;
+    }
+    if (currentSocketInstance) {
+      try { currentSocketInstance.disconnect(); } catch (_) {}
+      currentSocketInstance = null;
+    }
+    if (currentMapInstance) {
+      try { currentMapInstance.remove(); } catch (_) {}
+      currentMapInstance = null;
+    }
+
+    setTimeout(function () {
+      const container = document.getElementById('tb-leaflet-container');
+      if (!container || !window.L) return;
+
+      const map = L.map('tb-leaflet-container').setView([busLat, busLng], 13);
+      currentMapInstance = map;
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap Educanet',
+        maxZoom: 19
+      }).addTo(map);
+
+      const startIcon = L.icon({
+        iconUrl: '/assets/START.png',
+        iconSize: [28, 28],
+        iconAnchor: [14, 28],
+        popupAnchor: [0, -28]
+      });
+
+      const stopIcon = L.icon({
+        iconUrl: '/assets/STOP.png',
+        iconSize: [28, 28],
+        iconAnchor: [14, 28],
+        popupAnchor: [0, -28]
+      });
+
+      const busIcon = L.icon({
+        iconUrl: '/assets/bus.gif',
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+        popupAnchor: [0, -18]
+      });
+
+      const startMarker = L.marker([busLat, busLng], { icon: startIcon }).addTo(map).bindPopup('Départ du Bus');
+      const stopMarker = L.marker([studentLat, studentLng], { icon: stopIcon }).addTo(map).bindPopup(`Arrêt: ${escapeHtml(studentName)}`);
+      const busMarker = L.marker([busLat, busLng], { icon: busIcon }).addTo(map).bindPopup('Position actuelle du bus');
+
+      let routingControl = null;
+      if (window.L && L.Routing) {
+        try {
+          routingControl = L.Routing.control({
+            waypoints: [
+              L.latLng(busLat, busLng),
+              L.latLng(studentLat, studentLng)
+            ],
+            lineOptions: { styles: [{ color: '#007bff', weight: 5, opacity: 0.8 }] },
+            createMarker: function () { return null; },
+            routeWhileDragging: false,
+            addWaypoints: false,
+            show: false
+          }).addTo(map);
+        } catch (e) {
+          console.warn('Leaflet Routing Error:', e);
+        }
+      }
+
+      function updateBusPosition(lat, lng, speed) {
+        busMarker.setLatLng([lat, lng]);
+        map.setView([lat, lng], 14);
+
+        const dist = getDistance(lat, lng, studentLat, studentLng);
+        const distEl = document.getElementById('metric-distance');
+        if (distEl) distEl.textContent = dist < 1000 ? Math.round(dist) + ' m' : (dist / 1000).toFixed(1) + ' km';
+
+        const etaEl = document.getElementById('metric-eta');
+        if (etaEl) etaEl.textContent = Math.max(1, Math.round(dist / 400)) + ' min';
+
+        const speedEl = document.getElementById('metric-speed');
+        if (speedEl) speedEl.textContent = Math.round(speed || 28) + ' km/h';
+
+        return dist;
+      }
+
+      // Socket.IO Real-time Connection (NOUV integration)
+      if (window.io) {
+        const socket = io();
+        currentSocketInstance = socket;
+
+        socket.on('busLocationStart', function (coords) {
+          if (coords && coords.latitude && coords.longitude) {
+            startMarker.setLatLng([coords.latitude, coords.longitude]);
+          }
+        });
+
+        let alertShown = false;
+        socket.on('busLocationUpdate', function (coords) {
+          if (coords && coords.latitude && coords.longitude) {
+            const dist = updateBusPosition(coords.latitude, coords.longitude, coords.speed_kmh);
+
+            if (dist < 50 && !alertShown) {
+              alertShown = true;
+              L.popup()
+                .setLatLng([studentLat, studentLng])
+                .setContent(`
+                  <div style="text-align: center; padding: 6px;">
+                    <p style="margin: 0 0 6px; font-weight: bold;">👨🏻‍🎓 Votre enfant est arrivé.</p>
+                    <button id="closePopupBtn" 
+                            style="background-color: #007bff; color: white; border: none; padding: 5px 12px; border-radius: 5px; cursor: pointer; font-size: 12px;">
+                      Confirmer
+                    </button>
+                  </div>
+                `)
+                .openOn(map);
+
+              setTimeout(function () {
+                const btn = document.getElementById("closePopupBtn");
+                if (btn) {
+                  btn.addEventListener("click", function () {
+                    map.closePopup();
+                  });
+                }
+              }, 50);
+            }
+          }
+        });
+      }
+
+      // Simulation trigger logic
+      function startLocalSimulation() {
+        if (window.activeSimulationInterval) clearInterval(window.activeSimulationInterval);
+
+        // Generate steps along path from bus position to student stop to school
+        const waypoints = [
+          { lat: busLat, lng: busLng },
+          { lat: 36.8098, lng: 10.1784 },
+          { lat: studentLat, lng: studentLng },
+          { lat: 36.8111, lng: 10.1848 },
+          { lat: 36.8151, lng: 10.1886 }
+        ];
+
+        let stepPoints = [];
+        for (let i = 0; i < waypoints.length - 1; i++) {
+          const p1 = waypoints[i];
+          const p2 = waypoints[i + 1];
+          const numSteps = 8;
+          for (let s = 0; s < numSteps; s++) {
+            const ratio = s / numSteps;
+            stepPoints.push({
+              latitude: p1.lat + (p2.lat - p1.lat) * ratio,
+              longitude: p1.lng + (p2.lng - p1.lng) * ratio,
+              speed_kmh: 24 + Math.floor(Math.random() * 8)
+            });
+          }
+        }
+        stepPoints.push({ latitude: 36.8151, longitude: 10.1886, speed_kmh: 0 });
+
+        let currentStep = 0;
+        window.activeSimulationInterval = setInterval(function () {
+          if (currentStep >= stepPoints.length) {
+            clearInterval(window.activeSimulationInterval);
+            window.activeSimulationInterval = null;
+            return;
+          }
+
+          const point = stepPoints[currentStep];
+          currentStep++;
+
+          // Broadcast to Socket.IO if connected, or update locally
+          if (currentSocketInstance) {
+            currentSocketInstance.emit('busLocationUpdate', point);
+          } else {
+            updateBusPosition(point.latitude, point.longitude, point.speed_kmh);
+          }
+        }, 1500);
+      }
+
+      const simBtn = document.getElementById('btn-start-simulation');
+      if (simBtn) {
+        simBtn.addEventListener('click', function () {
+          startLocalSimulation();
+        });
+      }
+
+      // Auto-start simulation after 1s for immediate live demonstration
+      setTimeout(function () {
+        startLocalSimulation();
+      }, 1000);
+    }, 100);
   }
 
   function historyPage() {
@@ -683,9 +920,12 @@
       <div class="tb-actions-grid">
         ${actionTile('/administration/dashboard.html', 'layout-dashboard', 'Dashboard', true)}
         ${actionTile('/administration/carte.html', 'map-pinned', 'Trajets en direct')}
-        ${actionTile('/administration/liste-parents.html', 'users-round', 'Gérer les comptes')}
-        ${actionTile('/administration/liste-bus.html', 'bus-front', 'Gérer les bus')}
-        ${actionTile('/administration/liste-lignes.html', 'route', 'Gérer les lignes')}
+        ${actionTile('/administration/liste-parents.html', 'users-round', 'Parents')}
+        ${actionTile('/administration/liste-chauffeurs.html', 'steering-wheel', 'Chauffeurs')}
+        ${actionTile('/administration/liste-assistantes.html', 'user-check', 'Assistantes')}
+        ${actionTile('/administration/liste-admins.html', 'shield-check', 'Admins')}
+        ${actionTile('/administration/liste-bus.html', 'bus-front', 'Bus')}
+        ${actionTile('/administration/liste-lignes.html', 'route', 'Lignes')}
         ${actionTile('/administration/ajouter-compte.html', 'circle-plus', 'Ajouter')}
       </div>
       ${data.registrationRequests.length ? `
@@ -750,6 +990,13 @@
       glyph: 'user-check',
       meta: item => item.phone || item.email
     },
+    'liste-admins.html': {
+      title: 'Liste des administrateurs',
+      role: 'ADMIN',
+      add: '/administration/ajouter-admin.html',
+      glyph: 'shield-check',
+      meta: item => item.phone || item.email
+    },
     'liste-enfants.html': {
       title: 'Liste des enfants',
       collection: 'students',
@@ -790,7 +1037,10 @@
               <strong class="tb-row-title">${escapeHtml(item.first_name ? `${item.first_name} ${item.last_name}` : item.name || item.label)}</strong>
               <span class="tb-row-meta">${escapeHtml(config.meta(item))}</span>
             </div>
-            ${item.status ? badge(item.status) : item.active === 0 ? badge('INACTIVE') : badge('AVAILABLE', 'Actif')}
+            <div class="tb-row-actions">
+              ${item.status ? badge(item.status) : item.active === 0 ? badge('INACTIVE') : badge('AVAILABLE', 'Actif')}
+              ${config.role ? `<button class="tb-button tb-button-small tb-button-secondary" type="button" data-user-delete="${item.id}">Supprimer</button>` : ''}
+            </div>
           </div>`).join('') : '<div class="tb-empty">Aucun élément enregistré.</div>'}
       </div>`, { fab: { href: config.add, label: 'Ajouter', icon: 'plus' } });
   }
@@ -827,6 +1077,38 @@
     return `<div class="tb-field"><label for="field-${name}">${escapeHtml(label)}</label><input class="tb-input" id="field-${name}" name="${name}" type="${type || 'text'}" value="${escapeHtml(value || '')}" required></div>`;
   }
 
+  function textareaField(name, label, placeholder, value) {
+    return `<div class="tb-field"><label for="field-${name}">${escapeHtml(label)}</label><textarea class="tb-input" id="field-${name}" name="${name}" rows="5" placeholder="${escapeHtml(placeholder || '')}">${escapeHtml(value || '')}</textarea></div>`;
+  }
+
+  function parseRouteStops(rawValue) {
+    if (!rawValue) return [];
+    if (Array.isArray(rawValue)) return rawValue.filter(Boolean);
+    if (typeof rawValue !== 'string') return [];
+    const trimmed = rawValue.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch {
+      return trimmed.split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => {
+          const [name, address = '', latitude, longitude, stopOrder, plannedOffset] = line.split('|').map(part => part.trim());
+          return {
+            name,
+            address,
+            latitude: latitude ? Number(latitude) : null,
+            longitude: longitude ? Number(longitude) : null,
+            stop_order: stopOrder ? Number(stopOrder) : null,
+            planned_offset_min: plannedOffset ? Number(plannedOffset) : null
+          };
+        })
+        .filter(stop => stop.name);
+    }
+  }
+
   function busFormPage() {
     shell(`
       <h1 class="tb-title">Ajouter un bus</h1>
@@ -848,6 +1130,8 @@
         ${field('origin', 'Départ', 'text')}
         ${field('destination', 'Destination', 'text')}
         <div class="tb-form-row">${field('morning_time', 'Départ matin', 'time', '07:30')}${field('afternoon_time', 'Départ après-midi', 'time', '16:30')}</div>
+        ${textareaField('stops', 'Arrêts du trajet', 'Nom | Adresse | latitude | longitude | ordre | offset\nExemple : Dépôt | Rue A | 36.8 | 10.1 | 1 | 0', '')}
+        <p class="tb-subtitle">Ajoutez un arrêt par ligne. Format : Nom | Adresse | latitude | longitude | ordre | offset.</p>
         <button class="tb-button" type="submit">${icon('route')} Ajouter la ligne</button>
       </form>`);
   }
@@ -862,9 +1146,27 @@
     if (kind === 'student') {
       shell(`
         <h1 class="tb-title">${title}</h1>
-        <p class="tb-subtitle">Les inscriptions actives sont chargées depuis la base.</p>
-        <div class="tb-list">${data.students.map(student => `
-          <div class="tb-card tb-row"><span class="tb-avatar tb-avatar-sm">${initials(student)}</span><div class="tb-row-body"><strong class="tb-row-title">${escapeHtml(student.first_name)} ${escapeHtml(student.last_name)}</strong><span class="tb-row-meta">${escapeHtml(student.home_address)}</span></div>${badge('AVAILABLE', 'Inscrit')}</div>`).join('')}</div>`);
+        <p class="tb-subtitle">Sélectionnez une ligne puis un élève pour l’affecter.</p>
+        <div class="tb-list">
+          ${data.routes.map(route => `
+            <div class="tb-card">
+              <strong class="tb-row-title">${escapeHtml(route.name)}</strong>
+              <span class="tb-row-meta">${escapeHtml(route.origin)} → ${escapeHtml(route.destination)}</span>
+              <div class="tb-list" style="margin-top:10px">
+                ${data.students.map(student => {
+                  const assigned = data.routeStudents.some(entry => entry.route_id === route.id && entry.student_id === student.id);
+                  return `
+                    <div class="tb-row" style="margin-bottom:8px">
+                      <div class="tb-row-body">
+                        <strong>${escapeHtml(student.first_name)} ${escapeHtml(student.last_name)}</strong>
+                        <span class="tb-row-meta">${escapeHtml(student.home_address)}</span>
+                      </div>
+                      <button class="tb-button tb-button-small ${assigned ? 'tb-button-secondary' : ''}" type="button" data-route-student="${route.id}" data-student-id="${student.id}">${assigned ? 'Affecté' : 'Affecter'}</button>
+                    </div>`;
+                }).join('')}
+              </div>
+            </div>`).join('')}
+        </div>`);
       return;
     }
     shell(`
@@ -1022,6 +1324,9 @@
         ['capacity', 'parent_id', 'home_lat', 'home_lng', 'alert_radius_m'].forEach(key => {
           if (payload[key] !== undefined && payload[key] !== '') payload[key] = Number(payload[key]);
         });
+        if (form.dataset.entityForm === 'routes') {
+          payload.stops = parseRouteStops(payload.stops);
+        }
         await api(`/${form.dataset.entityForm}`, { method: 'POST', body: JSON.stringify(payload) });
         form.reset();
         showToast('Enregistrement ajouté');
@@ -1129,6 +1434,34 @@
         await reloadData(registrationAction.dataset.registrationStatus === 'APPROVED'
           ? 'Compte créé avec le mot de passe temporaire demo1234'
           : 'Demande refusée');
+      } catch (error) {
+        showToast(error.message);
+      }
+      return;
+    }
+
+    const userDeleteAction = event.target.closest('[data-user-delete]');
+    if (userDeleteAction) {
+      try {
+        await api(`/users/${userDeleteAction.dataset.userDelete}`, { method: 'DELETE' });
+        await reloadData('Utilisateur supprimé');
+      } catch (error) {
+        showToast(error.message);
+      }
+      return;
+    }
+
+    const routeStudentAction = event.target.closest('[data-route-student]');
+    if (routeStudentAction) {
+      try {
+        await api('/route-students', {
+          method: 'POST',
+          body: JSON.stringify({
+            route_id: Number(routeStudentAction.dataset.routeStudent),
+            student_id: Number(routeStudentAction.dataset.studentId)
+          })
+        });
+        await reloadData('Affectation mise à jour');
       } catch (error) {
         showToast(error.message);
       }
