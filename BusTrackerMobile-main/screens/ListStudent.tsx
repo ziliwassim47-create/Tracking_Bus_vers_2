@@ -1,528 +1,253 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, useWindowDimensions } from "react-native";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Table, TableWrapper, Cell } from 'react-native-table-component'; 
-import { Picker } from "@react-native-picker/picker";
-import { API_BASE_URL } from "../config";
-import { platformShadow, platformTextShadow } from "../styles/platformStyles";
-import { confirmLogout } from "../utils/logout";
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { AssistantStackParamList } from '../App';
+import { platformShadow, platformTextShadow } from '../styles/platformStyles';
+import { authenticatedRequest } from '../utils/session';
+import { confirmLogout } from '../utils/logout';
 
-type RootStackParamList = {
-  Login: any;
-  Tracking: { selectedBus: string };
-  List    : any;
-    TrackingScreenBus:any;
+type Props = NativeStackScreenProps<AssistantStackParamList, 'List'>;
+
+interface Assignment {
+  id: number;
+  route_id: number;
+  bus_id: number;
+  active: number | boolean;
+  route_name: string;
+  route_code: string;
+  registration: string;
+  bus_label: string;
 }
 
-type ListScreenProps = NativeStackScreenProps<RootStackParamList, "List">;
+interface Trip {
+  id: number;
+  route_id: number;
+  bus_id: number;
+  status: string;
+  direction: string;
+  route_name: string;
+  scheduled_start_at: string;
+}
 
-export default function Track({  route,navigation }: ListScreenProps) {
-  interface User {
-    ID: string;
-    NOM: string;
-    NIVEAU: string;
-    PRESENCE: boolean;
-  }
+interface Student {
+  id: number;
+  first_name: string;
+  last_name: string;
+  school_class?: string;
+}
 
-  const [selectedBus, setSelectedBus] = useState<string>("0"); 
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const { width: viewportWidth } = useWindowDimensions();
-  const isPhoneLayout = viewportWidth <= 480;
-  
-  // Helper function to extract number from niveau (e.g., "1ere anne" -> "1", "2eme" -> "2")
-  const getNiveauNumber = (niveau: string): string => {
-    if (!niveau || niveau === 'N/A') return 'N/A';
-    // Extract first number from the string
-    const match = niveau.match(/\d+/);
-    return match ? match[0] : niveau;
-  };
+interface RouteStudent {
+  route_id: number;
+  bus_id: number;
+  student_id: number;
+  active: number | boolean;
+}
 
-  // Fetch users when bus selection changes - filtering happens in backend
+interface StudentEvent {
+  trip_id: number;
+  student_id: number;
+  event_type: string;
+}
+
+interface Bootstrap {
+  assignments: Assignment[];
+  trips: Trip[];
+  students: Student[];
+  routeStudents: RouteStudent[];
+  studentEvents: StudentEvent[];
+}
+
+const assignmentKey = (assignment: Assignment) => `${assignment.route_id}:${assignment.bus_id}`;
+
+export default function ListStudent({ navigation }: Readonly<Props>) {
+  const [data, setData] = useState<Bootstrap | null>(null);
+  const [selectedKey, setSelectedKey] = useState('');
+  const [presence, setPresence] = useState<Record<number, boolean>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
   useEffect(() => {
-    setLoading(true);
-    // Backend handles filtering: if bus is selected, send bus number to backend
-    const API_URL = selectedBus && selectedBus !== "0" 
-      ? `${API_BASE_URL}/users?bus=${selectedBus}`
-      : `${API_BASE_URL}/users`;
-    
-    console.log('═══════════════════════════════════════');
-    console.log('🔍 [ListStudent] FETCH STARTING');
-    console.log('   API_URL:', API_URL);
-    console.log('   API_BASE_URL:', API_BASE_URL);
-    console.log('   Selected Bus:', selectedBus);
-    console.log('   Timestamp:', new Date().toISOString());
-    console.log('═══════════════════════════════════════');
-    
-    fetch(API_URL, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-    })
-      .then(res => {
-        console.log('✅ [ListStudent] Response received:', res.status, res.statusText);
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        return res.json();
+    authenticatedRequest<Bootstrap>('/bootstrap')
+      .then(payload => {
+        const activeAssignments = payload.assignments.filter(item => Boolean(item.active));
+        setData({ ...payload, assignments: activeAssignments });
+        setSelectedKey(activeAssignments[0] ? assignmentKey(activeAssignments[0]) : '');
       })
-      .then(data => {
-        console.log('📦 [ListStudent] Data received:', Array.isArray(data) ? `${data.length} items` : typeof data);
-        // Transform API data to match mobile app interface
-        const transformedUsers: User[] = (data || []).map((user: any) => ({
-          ID: String(user.ID),
-          NOM: user.NOM || 'Unknown',
-          NIVEAU: user.NIVEAU || 'N/A',
-          PRESENCE: Boolean(user.presence === 1 || user.presence === true || user.PRESENCE === true),
-        }));
-        setUsers(transformedUsers);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("═══════════════════════════════════════");
-        console.error("❌ [ListStudent] FETCH ERROR");
-        console.error("   Error:", err.message);
-        console.error("   Error Name:", err.name);
-        console.error("   API_URL:", API_URL);
-        console.error("   API_BASE_URL:", API_BASE_URL);
-        console.error("   Stack:", err.stack);
-        console.error("═══════════════════════════════════════");
-        Alert.alert(
-          "Erreur de connexion",
-          `Impossible de récupérer les étudiants.\n\nURL: ${API_URL}\n\nErreur: ${err.message}\n\nType: ${err.name}\n\nVérifiez:\n- Votre connexion internet\n- Que le serveur est accessible\n- Les logs du serveur backend`,
-          [{ text: "OK" }]
-        );
-        setLoading(false);
-      });
-  }, [selectedBus]); // Re-fetch when bus selection changes
+      .catch(err => setError(err instanceof Error ? err.message : 'Chargement impossible'))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const handleValider = () => {
-    const updatedPresence = users.map(user => ({ id: user.ID, present: user.PRESENCE }));
+  const selectedAssignment = useMemo(() => data?.assignments.find(item => assignmentKey(item) === selectedKey) || null,
+    [data, selectedKey]);
 
-    fetch(`${API_BASE_URL}/updateAllPresences`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedPresence),
-    })
-      .then(res => res.json())
-      .then(data => {
-        navigation.navigate("Tracking", { selectedBus });
-      })
-      .catch(err => console.error("Erreur lors de la mise à jour :", err));
-  };
+  const selectedTrip = useMemo(() => {
+    if (!data || !selectedAssignment) return null;
+    const matches = data.trips.filter(item => item.route_id === selectedAssignment.route_id && item.bus_id === selectedAssignment.bus_id);
+    return matches.find(item => item.status === 'IN_PROGRESS') || matches.find(item => item.status === 'PLANNED') || null;
+  }, [data, selectedAssignment]);
 
-  const togglePresence = (index: number) => {
-    const updatedUsers = [...users];
-    updatedUsers[index].PRESENCE = !updatedUsers[index].PRESENCE;
-    setUsers(updatedUsers);
-  };
+  const assignedStudents = useMemo(() => {
+    if (!data || !selectedAssignment) return [];
+    const studentIds = new Set(data.routeStudents
+      .filter(item => Boolean(item.active) && item.route_id === selectedAssignment.route_id && item.bus_id === selectedAssignment.bus_id)
+      .map(item => item.student_id));
+    return data.students.filter(student => studentIds.has(student.id));
+  }, [data, selectedAssignment]);
 
-  const handleLogout = () => {
-    confirmLogout(() => {
-      navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+  useEffect(() => {
+    const nextPresence: Record<number, boolean> = {};
+    assignedStudents.forEach(student => {
+      const lastEvent = data?.studentEvents.find(item => item.trip_id === selectedTrip?.id && item.student_id === student.id);
+      nextPresence[student.id] = lastEvent?.event_type === 'BOARDED';
     });
+    setPresence(nextPresence);
+  }, [assignedStudents, data?.studentEvents, selectedTrip?.id]);
+
+  const validateAndStart = async () => {
+    if (!selectedAssignment || !selectedTrip) {
+      Alert.alert('Trajet indisponible', 'Aucun trajet planifié pour cette affectation.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await Promise.all(assignedStudents.map(student => authenticatedRequest('/student-events', {
+        method: 'POST',
+        body: JSON.stringify({
+          trip_id: selectedTrip.id,
+          student_id: student.id,
+          event_type: presence[student.id] ? 'BOARDED' : 'ABSENT',
+        }),
+      })));
+      if (selectedTrip.status !== 'IN_PROGRESS') {
+        await authenticatedRequest(`/trips/${selectedTrip.id}/start`, { method: 'POST' });
+      }
+      navigation.navigate('Tracking', {
+        selectedBus: String(selectedAssignment.bus_id),
+        tripId: selectedTrip.id,
+        tripStatus: 'IN_PROGRESS',
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Enregistrement impossible';
+      setError(message);
+      Alert.alert('Erreur', message);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const renderPresence = (present: boolean, index: number) => (
-    <TouchableOpacity
-      key={index}
-      style={[styles.presenceToggle, present ? styles.presenceToggleActive : styles.presenceToggleInactive]}
-      onPress={() => togglePresence(index)}
-      activeOpacity={0.8}
-    >
-      <Text style={[styles.presenceToggleText, present && styles.presenceToggleTextActive]}>
-        {present ? "✓" : "❌"}
-      </Text>
-    </TouchableOpacity>
-  );
+  const handleLogout = () => confirmLogout(() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] }));
+
+  if (loading) {
+    return <View style={styles.center}><ActivityIndicator size="large" color="#14b8a6" /><Text style={styles.loadingText}>Chargement de votre affectation…</Text></View>;
+  }
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerContainer, isPhoneLayout && styles.headerContainerPhone]}>
-        <Text style={[styles.header, isPhoneLayout && styles.headerPhone]}>🚍 Bus Tracker</Text>
-        <Text style={styles.subtitle}>Gestion des présences</Text>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
-          <Text style={styles.logoutButtonText}>🚪 Se déconnecter</Text>
-        </TouchableOpacity>
-      </View>
-     
-      <View style={[styles.pickerContainer, isPhoneLayout && styles.edgeSpacingPhone]}>
-        <Text style={styles.pickerLabel}>Sélectionner un bus:</Text>
-        <Picker 
-          selectedValue={selectedBus} 
-          onValueChange={(value) => {
-            setSelectedBus(value);
-            // Backend will filter automatically when we fetch
-          }}
-          style={styles.picker}
-        >
-         <Picker.Item label="📋 Tous les bus" value="0" />
-         <Picker.Item label="🚌 Bus 1" value="1" />
-         <Picker.Item label="🚌 Bus 2" value="2" />
-         <Picker.Item label="🚌 Bus 3" value="3" />
-         <Picker.Item label="🚌 Bus 4" value="4" />
-        </Picker>
+      <View style={styles.headerContainer}>
+        <View style={styles.headerTop}>
+          <View><Text style={styles.kicker}>Espace Assistante</Text><Text style={styles.header}>Présences</Text></View>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}><Text style={styles.logoutButtonText}>Déconnexion</Text></TouchableOpacity>
+        </View>
+        <Text style={styles.subtitle}>Vérifiez les enfants avant de démarrer le trajet</Text>
       </View>
 
-      {selectedBus !== "0" && (
-        <View style={styles.busInfoContainer}>
-          <Text style={styles.busInfo}>📌 {users.length} étudiant(s) dans Bus {selectedBus}</Text>
-        </View>
-      )}
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#14b8a6" />
-          <Text style={styles.loadingText}>Chargement...</Text>
-        </View>
-      ) : (
-        <ScrollView 
-          style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, isPhoneLayout && styles.scrollContentPhone]}
-          showsVerticalScrollIndicator={true}
-        >
-          {users.length > 0 ? (
-            isPhoneLayout ? (
-              <View style={styles.studentCards}>
-                {users.map((student, index) => (
-                  <View key={student.ID} style={styles.studentCard}>
-                    <View style={styles.studentCardInfo}>
-                      <Text style={styles.studentCardName} numberOfLines={2}>{student.NOM}</Text>
-                      <Text style={styles.studentCardLevel}>Niveau {getNiveauNumber(student.NIVEAU)}</Text>
-                    </View>
-                    {renderPresence(student.PRESENCE, index)}
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <View style={styles.tableContainer}>
-                <Table borderStyle={styles.tableBorder}>
-                  <TableWrapper style={styles.tableHeaderRow}>
-                    <Cell data="Nom" style={styles.tableHeaderCell} textStyle={styles.tableHeaderText} flex={2} />
-                    <Cell data="Niveau" style={styles.tableHeaderCell} textStyle={styles.tableHeaderText} flex={1} />
-                    <Cell data="Présence" style={styles.tableHeaderCell} textStyle={styles.tableHeaderText} flex={2} />
-                  </TableWrapper>
-                  {users.map((student, index) => (
-                    <TableWrapper key={student.ID} style={index % 2 === 0 ? StyleSheet.flatten([styles.tableRow, styles.tableRowEven]) : styles.tableRow}>
-                      <Cell data={student.NOM} textStyle={styles.tableCellText} flex={2} style={styles.tableCell} />
-                      <Cell data={getNiveauNumber(student.NIVEAU)} textStyle={styles.tableCellTextCenter} flex={1} style={styles.tableCell} />
-                      <Cell data={renderPresence(student.PRESENCE, index)} flex={2} style={styles.tableCell} />
-                    </TableWrapper>
-                  ))}
-                </Table>
-              </View>
-            )
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>📋</Text>
-              <Text style={styles.emptyText}>Aucun étudiant trouvé</Text>
-              <Text style={styles.emptySubtext}>Sélectionnez un autre bus</Text>
+        <View style={styles.assignmentCard}>
+          <Text style={styles.label}>Bus et trajet affectés</Text>
+          {data?.assignments.length ? (
+            <View style={styles.pickerShell}>
+              <Picker selectedValue={selectedKey} onValueChange={value => setSelectedKey(String(value))} style={styles.picker}>
+                {data.assignments.map(item => <Picker.Item key={assignmentKey(item)} value={assignmentKey(item)} label={`🚌 ${item.bus_label} · ${item.route_code}`} />)}
+              </Picker>
             </View>
-          )}
-        </ScrollView>
-      )}
+          ) : <Text style={styles.emptyText}>Aucune affectation active pour ce compte.</Text>}
+          {selectedAssignment ? <View style={styles.routeInfo}><Text style={styles.routeName}>{selectedAssignment.route_name}</Text><Text style={styles.routeMeta}>{selectedAssignment.registration} · {selectedTrip?.status === 'IN_PROGRESS' ? 'Trajet en cours' : selectedTrip ? 'Prêt à démarrer' : 'Aucun départ planifié'}</Text></View> : null}
+        </View>
 
-      <TouchableOpacity 
-        style={[styles.validButton, isPhoneLayout && styles.edgeSpacingPhone, (users.length === 0 || loading) && styles.validButtonDisabled]}
-        onPress={handleValider}
-        disabled={users.length === 0 || loading}
-      >
-        <Text style={styles.validButtonText}>✔ Valider les présences</Text>
-      </TouchableOpacity>
+        <View style={styles.sectionHeading}>
+          <View><Text style={styles.sectionTitle}>Liste des enfants</Text><Text style={styles.sectionSubtitle}>Touchez le statut pour le modifier</Text></View>
+          <View style={styles.countBadge}><Text style={styles.countText}>{assignedStudents.length}</Text></View>
+        </View>
+
+        {assignedStudents.length ? <View style={styles.studentList}>
+          {assignedStudents.map(student => {
+            const isPresent = Boolean(presence[student.id]);
+            return <View key={student.id} style={styles.studentCard}>
+              <View style={styles.avatar}><Text style={styles.avatarText}>{student.first_name[0]}{student.last_name[0]}</Text></View>
+              <View style={styles.studentInfo}><Text style={styles.studentName}>{student.first_name} {student.last_name}</Text><Text style={styles.studentClass}>{student.school_class || 'Classe non renseignée'}</Text></View>
+              <TouchableOpacity
+                accessibilityRole="switch"
+                accessibilityState={{ checked: isPresent }}
+                style={[styles.presenceButton, isPresent && styles.presenceButtonActive]}
+                onPress={() => setPresence(current => ({ ...current, [student.id]: !current[student.id] }))}
+              ><Text style={[styles.presenceText, isPresent && styles.presenceTextActive]}>{isPresent ? '✓ Présent' : '✕ Absent'}</Text></TouchableOpacity>
+            </View>;
+          })}
+        </View> : <View style={styles.emptyCard}><Text style={styles.emptyIcon}>📋</Text><Text style={styles.emptyText}>Aucun enfant affecté à ce bus et à ce trajet.</Text></View>}
+
+        <TouchableOpacity
+          style={[styles.startButton, (!assignedStudents.length || !selectedTrip || saving) && styles.startButtonDisabled]}
+          disabled={!assignedStudents.length || !selectedTrip || saving}
+          onPress={validateAndStart}
+        ><Text style={styles.startButtonText}>{saving ? 'Enregistrement…' : selectedTrip?.status === 'IN_PROGRESS' ? '✓ Valider et continuer le trajet' : '✓ Valider et démarrer le trajet'}</Text></TouchableOpacity>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#f0fdfa", 
-  },
-  headerContainer: {
-    backgroundColor: "#14b8a6",
-    paddingTop: 50,
-    paddingBottom: 25,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    ...platformShadow("#14b8a6", 6, 0.4, 12, 10),
-  },
-  headerContainerPhone: {
-    paddingTop: 34,
-    paddingBottom: 18,
-    paddingHorizontal: 14,
-    borderBottomLeftRadius: 22,
-    borderBottomRightRadius: 22,
-  },
-  header: { 
-    textAlign: "center", 
-    fontSize: 32, 
-    fontWeight: "800", 
-    color: "#fff", 
-    marginBottom: 6,
-    letterSpacing: 0.8,
-    ...platformTextShadow("rgba(0,0,0,0.1)", 2, 4),
-  },
-  headerPhone: {
-    fontSize: 26,
-  },
-  subtitle: {
-    textAlign: "center",
-    fontSize: 15,
-    color: "#ccfbf1",
-    fontWeight: "500",
-    opacity: 0.95,
-  },
-  logoutButton: {
-    alignSelf: "center",
-    marginTop: 14,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.45)",
-  },
-  logoutButtonText: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  pickerContainer: { 
-    marginHorizontal: 20,
-    marginTop: 22,
-    marginBottom: 18,
-    backgroundColor: "#fff",
-    borderRadius: 18,
-    padding: 16,
-    ...platformShadow("#000", 3, 0.1, 10, 4),
-    borderWidth: 1.5,
-    borderColor: "#e5e7eb",
-  },
-  edgeSpacingPhone: {
-    marginHorizontal: 12,
-  },
-  pickerLabel: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#374151",
-    marginBottom: 12,
-    paddingLeft: 4,
-    letterSpacing: 0.3,
-  },
-  picker: {
-    height: 52,
-  },
-  busInfoContainer: {
-    marginHorizontal: 20,
-    marginBottom: 18,
-    backgroundColor: "#0d9488",
-    padding: 16,
-    borderRadius: 18,
-    ...platformShadow("#0d9488", 4, 0.3, 8, 6),
-    borderWidth: 2,
-    borderColor: "#2dd4bf",
-  },
-  busInfo: { 
-    fontSize: 16, 
-    color: "#fff", 
-    fontWeight: "700", 
-    textAlign: "center",
-    letterSpacing: 0.5,
-    ...platformTextShadow("rgba(0,0,0,0.1)", 1, 2),
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    paddingTop: 12,
-  },
-  scrollContentPhone: {
-    paddingHorizontal: 12,
-  },
-  studentCards: {
-    gap: 10,
-  },
-  studentCard: {
-    minHeight: 76,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: "#e5e7eb",
-    ...platformShadow("#000", 2, 0.07, 8, 3),
-  },
-  studentCardInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
-  studentCardName: {
-    color: "#1e293b",
-    fontSize: 15,
-    fontWeight: "700",
-    marginBottom: 5,
-  },
-  studentCardLevel: {
-    color: "#64748b",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  tableContainer: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    overflow: "hidden",
-    ...platformShadow("#000", 4, 0.12, 12, 6),
-    borderWidth: 1.5,
-    borderColor: "#e5e7eb",
-  },
-  tableBorder: { 
-    borderWidth: 1, 
-    borderColor: "#e5e7eb" 
-  },
-  tableHeaderRow: {
-    flexDirection: "row",
-    backgroundColor: "#14b8a6",
-    height: 60,
-    borderBottomWidth: 2,
-    borderBottomColor: "#0d9488",
-  },
-  tableHeaderCell: {
-    height: 60,
-    justifyContent: "center",
-    borderRightWidth: 1,
-    borderRightColor: "#0d9488",
-    paddingHorizontal: 12,
-  },
-  tableHeaderText: {
-    fontWeight: "700",
-    fontSize: 14,
-    color: "#fff",
-    textAlign: "center",
-    letterSpacing: 0.5,
-  },
-  tableRow: {
-    flexDirection: "row",
-    minHeight: 65,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-    backgroundColor: "#fff",
-  },
-  tableRowEven: {
-    backgroundColor: "#fafbfc",
-  },
-  tableCell: {
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRightWidth: 1,
-    borderRightColor: "#f3f4f6",
-  },
-  tableCellText: {
-    fontSize: 13,
-    color: "#374151",
-    fontWeight: "500",
-    textAlign: "left",
-  },
-  tableCellTextCenter: {
-    fontSize: 13,
-    color: "#374151",
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  presenceToggle: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: "#fee2e2",
-    borderWidth: 2,
-    borderColor: "#fca5a5",
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 85,
-  },
-  presenceToggleActive: {
-    backgroundColor: "#d1fae5",
-    borderColor: "#6ee7b7",
-  },
-  presenceToggleInactive: {
-    backgroundColor: "#fee2e2",
-    borderColor: "#fca5a5",
-  },
-  presenceToggleText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#dc2626",
-    letterSpacing: 0.3,
-  },
-  presenceToggleTextActive: {
-    color: "#059669",
-  },
-  validButton: { 
-    backgroundColor: "#14b8a6", 
-    padding: 18, 
-    borderRadius: 18, 
-    alignItems: "center", 
-    marginHorizontal: 20,
-    marginBottom: 25,
-    marginTop: 15,
-    ...platformShadow("#14b8a6", 6, 0.4, 12, 8),
-    borderWidth: 2,
-    borderColor: "#2dd4bf",
-  },
-  validButtonDisabled: {
-    backgroundColor: "#d1d5db",
-    borderColor: "#9ca3af",
-    ...platformShadow("#000", 0, 0, 0, 0),
-  },
-  validButtonText: { 
-    color: "#fff", 
-    fontSize: 17, 
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    ...platformTextShadow("rgba(0,0,0,0.1)", 1, 2),
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 60,
-  },
-  loadingText: {
-    marginTop: 15,
-    fontSize: 15,
-    color: "#6b7280",
-    fontWeight: "600",
-  },
-  emptyContainer: {
-    padding: 50,
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    marginTop: 20,
-    borderWidth: 2,
-    borderColor: "#e5e7eb",
-    borderStyle: "dashed",
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 15,
-  },
-  emptyText: {
-    fontSize: 17,
-    color: "#4b5563",
-    fontWeight: "700",
-    marginBottom: 6,
-  },
-  emptySubtext: {
-    fontSize: 13,
-    color: "#9ca3af",
-    fontStyle: "italic",
-  },
+  container:{flex:1,backgroundColor:'#f0fdfa'},
+  center:{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:'#f0fdfa',padding:24},
+  loadingText:{marginTop:14,color:'#64748b',fontWeight:'600'},
+  headerContainer:{backgroundColor:'#14b8a6',paddingTop:46,paddingBottom:24,paddingHorizontal:20,borderBottomLeftRadius:30,borderBottomRightRadius:30,...platformShadow('#14b8a6',6,.35,14,10)},
+  headerTop:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},
+  kicker:{color:'#ccfbf1',fontSize:12,fontWeight:'700',marginBottom:2},
+  header:{color:'#fff',fontSize:27,fontWeight:'900',letterSpacing:.4,...platformTextShadow('rgba(0,0,0,.1)',2,3)},
+  subtitle:{color:'#e0fdf4',fontSize:13,fontWeight:'600',marginTop:10},
+  logoutButton:{minHeight:40,justifyContent:'center',paddingHorizontal:13,borderRadius:999,backgroundColor:'rgba(255,255,255,.18)',borderWidth:1,borderColor:'rgba(255,255,255,.45)'},
+  logoutButtonText:{color:'#fff',fontSize:12,fontWeight:'800'},
+  content:{padding:16,paddingBottom:30},
+  error:{padding:12,marginBottom:12,borderRadius:12,backgroundColor:'#fff1f2',color:'#be123c',fontWeight:'600'},
+  assignmentCard:{padding:16,borderRadius:18,backgroundColor:'#fff',borderWidth:1.5,borderColor:'#e5e7eb',...platformShadow('#000',3,.08,10,4)},
+  label:{color:'#374151',fontSize:14,fontWeight:'800',marginBottom:9},
+  pickerShell:{overflow:'hidden',borderWidth:1.5,borderColor:'#d1d5db',borderRadius:12,backgroundColor:'#f8fafc'},
+  picker:{height:50,width:'100%'},
+  routeInfo:{marginTop:12,padding:12,borderRadius:12,backgroundColor:'#ecfdf5'},
+  routeName:{color:'#0f766e',fontSize:14,fontWeight:'800'},
+  routeMeta:{color:'#64748b',fontSize:11,fontWeight:'600',marginTop:3},
+  sectionHeading:{marginTop:20,marginBottom:10,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  sectionTitle:{color:'#1e293b',fontSize:17,fontWeight:'900'},
+  sectionSubtitle:{color:'#64748b',fontSize:11,fontWeight:'500',marginTop:2},
+  countBadge:{minWidth:32,height:32,paddingHorizontal:8,alignItems:'center',justifyContent:'center',borderRadius:16,backgroundColor:'#ccfbf1'},
+  countText:{color:'#0f766e',fontWeight:'900'},
+  studentList:{gap:10},
+  studentCard:{minHeight:78,padding:12,flexDirection:'row',alignItems:'center',gap:11,borderRadius:16,backgroundColor:'#fff',borderWidth:1.5,borderColor:'#e5e7eb',...platformShadow('#000',2,.06,7,3)},
+  avatar:{width:44,height:44,flexShrink:0,alignItems:'center',justifyContent:'center',borderRadius:22,backgroundColor:'#14b8a6'},
+  avatarText:{color:'#fff',fontSize:14,fontWeight:'900'},
+  studentInfo:{flex:1,minWidth:0},
+  studentName:{color:'#1e293b',fontSize:14,fontWeight:'800'},
+  studentClass:{color:'#64748b',fontSize:11,fontWeight:'600',marginTop:3},
+  presenceButton:{minWidth:85,minHeight:40,paddingHorizontal:10,alignItems:'center',justifyContent:'center',borderRadius:13,borderWidth:1.5,borderColor:'#fca5a5',backgroundColor:'#fee2e2'},
+  presenceButtonActive:{borderColor:'#6ee7b7',backgroundColor:'#d1fae5'},
+  presenceText:{color:'#dc2626',fontSize:11,fontWeight:'900'},
+  presenceTextActive:{color:'#059669'},
+  emptyCard:{padding:28,alignItems:'center',borderRadius:18,borderWidth:2,borderStyle:'dashed',borderColor:'#d1d5db',backgroundColor:'#fff'},
+  emptyIcon:{fontSize:38,marginBottom:8},
+  emptyText:{color:'#64748b',fontSize:13,fontWeight:'600',textAlign:'center'},
+  startButton:{minHeight:56,marginTop:18,alignItems:'center',justifyContent:'center',paddingHorizontal:16,borderRadius:18,backgroundColor:'#14b8a6',borderWidth:2,borderColor:'#2dd4bf',...platformShadow('#14b8a6',5,.35,11,7)},
+  startButtonDisabled:{backgroundColor:'#cbd5e1',borderColor:'#d1d5db',...platformShadow('#000',0,0,0,0)},
+  startButtonText:{color:'#fff',fontSize:15,fontWeight:'900',textAlign:'center',letterSpacing:.2},
 });

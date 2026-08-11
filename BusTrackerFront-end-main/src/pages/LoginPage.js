@@ -136,7 +136,7 @@ export default function LoginPage() {
       <style>{`
         .login-bg {
           min-height: 100vh;
-          background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+          background: linear-gradient(180deg, #dff7f3 0%, #f0fdfa 55%, #ecfeff 100%);
           display: flex; align-items: center; justify-content: center;
           padding: 24px; position: relative; overflow: hidden;
         }
@@ -146,22 +146,23 @@ export default function LoginPage() {
         }
         .login-blob-1 {
           width: 400px; height: 400px;
-          background: radial-gradient(circle, rgba(20,184,166,0.25) 0%, transparent 70%);
+          background: radial-gradient(circle, rgba(20,184,166,0.2) 0%, transparent 70%);
           top: -100px; left: -100px;
         }
         .login-blob-2 {
           width: 350px; height: 350px;
-          background: radial-gradient(circle, rgba(139,92,246,0.2) 0%, transparent 70%);
+          background: radial-gradient(circle, rgba(45,212,191,0.18) 0%, transparent 70%);
           bottom: -80px; right: -80px;
         }
         .login-wrapper {
           display: flex; gap: 0; position: relative; z-index: 1;
-          max-width: 900px; width: 100%;
-          border-radius: 24px; overflow: hidden;
-          box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+          max-width: 440px; width: 100%;
+          border-radius: 22px; overflow: hidden;
+          box-shadow: 0 16px 42px rgba(15,118,110,0.18);
+          border: 1.5px solid #e5e7eb;
         }
         .login-hero {
-          flex: 1; background: linear-gradient(135deg, var(--teal-600) 0%, var(--teal-700) 100%);
+          display: none; flex: 1; background: linear-gradient(135deg, var(--teal-600) 0%, var(--teal-700) 100%);
           padding: 48px 40px; display: flex; flex-direction: column;
           justify-content: center; color: #fff;
         }
@@ -177,11 +178,11 @@ export default function LoginPage() {
         .login-feature-icon { font-size: 20px; }
 
         .login-card {
-          width: 400px; background: #fff;
+          width: 100%; background: #fff;
           padding: 40px 36px; display: flex; flex-direction: column; gap: 0;
         }
         .login-card-header { text-align: center; margin-bottom: 28px; }
-        .login-card-logo { font-size: 40px; margin-bottom: 12px; }
+        .login-card-logo { width: 68px; height: 68px; margin: 0 auto 14px; display: grid; place-items: center; border-radius: 22px; background: #ccfbf1; font-size: 38px; box-shadow: 0 5px 14px rgba(20,184,166,.18); }
         .login-card-title { font-size: 22px; font-weight: 800; color: var(--gray-800); margin-bottom: 6px; }
         .login-card-subtitle { font-size: 13px; color: var(--gray-500); }
 
@@ -212,7 +213,6 @@ export default function LoginPage() {
         }
 
         @media (max-width: 700px) {
-          .login-hero { display: none; }
           .login-bg { padding: 12px; align-items: flex-start; padding-top: max(20px, env(safe-area-inset-top)); overflow-y: auto; }
           .login-card { width: 100%; padding: 30px 22px; border-radius: 20px; }
           .login-wrapper { max-width: 440px; border-radius: 20px; }

@@ -16,24 +16,14 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { platformShadow, platformTextShadow } from '../styles/platformStyles';
 import { API_BASE_URL } from '../config';
-import { useParent } from '../context/ParentContext';
 import { AuthSession, saveSession } from '../utils/session';
+import type { AssistantStackParamList } from '../App';
 
-type RootStackParamList = {
-  Login: undefined;
-  List: undefined;
-  Tracking: { selectedBus: string };
-  TrackingScreenBus: any;
-  Students: { selectedBus: string };
-  ParentHome: undefined;
-};
-
-type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;
+type LoginScreenProps = NativeStackScreenProps<AssistantStackParamList, 'Login'>;
 
 export default function LoginScreen(props: Readonly<LoginScreenProps>) {
   const { navigation } = props;
-  const { activateParentSession } = useParent();
-  const [phone, setPhone] = useState('20200200');
+  const [phone, setPhone] = useState('20400400');
   const [password, setPassword] = useState('demo1234');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -75,16 +65,11 @@ export default function LoginScreen(props: Readonly<LoginScreenProps>) {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Connexion impossible');
       const session = result as AuthSession;
-      if (session.user.role === 'ADMIN') {
-        throw new Error("Le compte Administration doit utiliser le portail web d’administration.");
+      if (session.user.role !== 'ASSISTANT') {
+        throw new Error("Cet espace est réservé aux assistantes.");
       }
-      if (session.user.role === 'PARENT') {
-        await activateParentSession(session);
-        navigation.reset({ index: 0, routes: [{ name: 'ParentHome' }] });
-      } else {
-        await saveSession(session);
-        navigation.reset({ index: 0, routes: [{ name: 'List' }] });
-      }
+      await saveSession(session);
+      navigation.reset({ index: 0, routes: [{ name: 'List' }] });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Connexion impossible';
       Alert.alert('Erreur de connexion', message);
@@ -116,8 +101,8 @@ export default function LoginScreen(props: Readonly<LoginScreenProps>) {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Bienvenue</Text>
-          <Text style={styles.subtitle}>Gérez l'éducation en toute élégance</Text>
+          <Text style={styles.title}>Espace Assistante</Text>
+          <Text style={styles.subtitle}>Présences et démarrage du trajet</Text>
         </View>
 
         {/* ─── Phone ─── */}
@@ -171,6 +156,8 @@ export default function LoginScreen(props: Readonly<LoginScreenProps>) {
         >
           <Text style={styles.loginButtonText}>{loginButtonLabel}</Text>
         </TouchableOpacity>
+
+        <Text style={styles.accountHint}>Compte test : 20400400 / demo1234</Text>
 
         </Animated.View>
       </ScrollView>
@@ -340,6 +327,13 @@ const styles = StyleSheet.create({
     fontSize: 17,
     letterSpacing: 0.8,
     ...platformTextShadow('rgba(0,0,0,0.1)', 1, 2),
+  },
+  accountHint: {
+    marginTop: 18,
+    textAlign: 'center',
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '600',
   },
   footer: {
     marginTop: 24,
