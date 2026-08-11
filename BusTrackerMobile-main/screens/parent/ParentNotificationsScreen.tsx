@@ -9,6 +9,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useParent, Notification } from '../../context/ParentContext';
 import ParentBottomNav from '../../components/ParentBottomNav';
+import { platformShadow } from '../../styles/platformStyles';
 
 type RootStackParamList = {
   ParentHome: undefined;
@@ -159,11 +160,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
-    shadowColor: '#14b8a6',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    elevation: 10,
+    ...platformShadow('#14b8a6', 6, 0.3, 14, 10),
   },
   backBtn: {
     color: '#e0fdf4',
@@ -203,11 +200,7 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 10,
     alignItems: 'flex-start',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    ...platformShadow('#000', 2, 0.06, 8, 3),
     borderWidth: 1,
     borderColor: '#f3f4f6',
     position: 'relative',

@@ -12,6 +12,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useParent } from '../../context/ParentContext';
 import ChildSwitcher from '../../components/ChildSwitcher';
 import ParentBottomNav from '../../components/ParentBottomNav';
+import { platformShadow, supportsNativeAnimations } from '../../styles/platformStyles';
 
 type RootStackParamList = {
   ParentHome: undefined;
@@ -64,9 +65,9 @@ function ActionTile(props: Readonly<ActionTileProps>) {
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () =>
-    Animated.spring(scale, { toValue: 0.94, useNativeDriver: true }).start();
+    Animated.spring(scale, { toValue: 0.94, useNativeDriver: supportsNativeAnimations }).start();
   const handlePressOut = () =>
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
+    Animated.spring(scale, { toValue: 1, useNativeDriver: supportsNativeAnimations }).start();
 
   return (
     <TouchableOpacity
@@ -218,11 +219,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
-    shadowColor: '#14b8a6',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 12,
+    ...platformShadow('#14b8a6', 8, 0.35, 16, 12),
   },
   headerRow: {
     flexDirection: 'row',
@@ -306,11 +303,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 20,
     padding: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    ...platformShadow('#000', 4, 0.1, 12, 5),
     borderWidth: 1.5,
     borderColor: '#e5e7eb',
   },
@@ -409,17 +402,12 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 3,
+    ...platformShadow('#000', 2, 0.07, 8, 3),
     borderWidth: 1.5,
     borderColor: '#f3f4f6',
   },
   actionTilePrimary: {
-    shadowOpacity: 0.25,
-    elevation: 6,
+    ...platformShadow('#000', 2, 0.25, 8, 6),
     borderWidth: 0,
   },
   actionTileIcon: {

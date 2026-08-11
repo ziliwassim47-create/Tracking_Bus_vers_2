@@ -8,9 +8,11 @@ import {
   Alert,
   Animated,
   Easing,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { platformShadow, platformTextShadow } from '../styles/platformStyles';
 
 type RootStackParamList = {
   Login: undefined;
@@ -43,13 +45,13 @@ export default function LoginScreen(props: Readonly<LoginScreenProps>) {
         toValue: 0,
         duration: 400,
         easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
       Animated.timing(animOpacity, {
         toValue: 1,
         duration: 400,
         easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
     ]).start();
   }, []);
@@ -196,11 +198,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 40,
     paddingHorizontal: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 6,
+    ...platformShadow('#000', 4, 0.12, 12, 6),
     borderWidth: 1.5,
     borderColor: '#e5e7eb',
   },
@@ -210,11 +208,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 18,
     marginBottom: 24,
-    shadowColor: '#14b8a6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    ...platformShadow('#14b8a6', 4, 0.3, 8, 6),
   },
   headerTitle: {
     textAlign: 'center',
@@ -223,9 +217,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginBottom: 4,
     letterSpacing: 0.8,
-    textShadowColor: 'rgba(0,0,0,0.1)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    ...platformTextShadow('rgba(0,0,0,0.1)', 2, 4),
   },
   headerSubtitle: {
     textAlign: 'center',
@@ -275,11 +267,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     fontSize: 15,
     color: '#1e293b',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    ...platformShadow('#000', 1, 0.05, 3, 2),
     width: '100%',
   },
   inputFieldPassword: {
@@ -292,11 +280,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     fontSize: 15,
     color: '#1e293b',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    ...platformShadow('#000', 1, 0.05, 3, 2),
     width: '100%',
   },
   passwordField: {
@@ -346,11 +330,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 18,
     alignItems: 'center',
-    shadowColor: '#14b8a6',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+    ...platformShadow('#14b8a6', 6, 0.4, 12, 8),
     borderWidth: 2,
     borderColor: '#2dd4bf',
   },
@@ -359,9 +339,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 17,
     letterSpacing: 0.8,
-    textShadowColor: 'rgba(0,0,0,0.1)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    ...platformTextShadow('rgba(0,0,0,0.1)', 1, 2),
   },
   footer: {
     marginTop: 24,
@@ -410,6 +388,6 @@ const styles = StyleSheet.create({
   loginButtonParent: {
     backgroundColor: '#8b5cf6',
     borderColor: '#a78bfa',
-    shadowColor: '#8b5cf6',
+    ...platformShadow('#8b5cf6', 6, 0.4, 12, 8),
   },
 });

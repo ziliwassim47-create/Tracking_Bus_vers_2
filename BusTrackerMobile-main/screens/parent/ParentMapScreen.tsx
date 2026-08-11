@@ -11,6 +11,7 @@ import { useParent } from '../../context/ParentContext';
 import ChildSwitcher from '../../components/ChildSwitcher';
 import ParentBottomNav from '../../components/ParentBottomNav';
 import { WebView } from 'react-native-webview';
+import { platformShadow, supportsNativeAnimations } from '../../styles/platformStyles';
 
 type RootStackParamList = {
   ParentHome: undefined;
@@ -54,8 +55,8 @@ export default function ParentMapScreen(props: Readonly<Props>) {
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.4, duration: 700, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.4, duration: 700, useNativeDriver: supportsNativeAnimations }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: supportsNativeAnimations }),
       ])
     );
     loop.start();
@@ -258,10 +259,7 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     backgroundColor: '#4ade80',
-    shadowColor: '#4ade80',
-    shadowRadius: 4,
-    shadowOpacity: 0.9,
-    elevation: 3,
+    ...platformShadow('#4ade80', 0, 0.9, 4, 3),
   },
   liveLabel: {
     color: '#ccfbf1',
@@ -277,11 +275,7 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     borderRadius: 20,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 6,
+    ...platformShadow('#000', 4, 0.12, 12, 6),
   },
   map: {
     flex: 1,
@@ -292,11 +286,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 14,
     marginBottom: 10,
     padding: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 4,
+    ...platformShadow('#000', -2, 0.06, 8, 4),
   },
   sheetHandle: {
     width: 36,

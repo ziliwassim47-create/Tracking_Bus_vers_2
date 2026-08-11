@@ -13,6 +13,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useParent } from '../../context/ParentContext';
 import ParentBottomNav from '../../components/ParentBottomNav';
 import { API_BASE_URL } from '../../config';
+import { platformShadow } from '../../styles/platformStyles';
 
 type RootStackParamList = {
   ParentHome: undefined;
@@ -211,11 +212,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
-    shadowColor: '#14b8a6',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    elevation: 10,
+    ...platformShadow('#14b8a6', 6, 0.3, 14, 10),
   },
   backBtn: { color: '#e0fdf4', fontSize: 14, fontWeight: '600', marginBottom: 6 },
   headerTitle: { fontSize: 22, fontWeight: '800', color: '#fff', marginBottom: 4 },
@@ -276,16 +273,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 18,
     alignItems: 'center',
-    shadowColor: '#14b8a6',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
+    ...platformShadow('#14b8a6', 6, 0.35, 12, 8),
   },
   submitBtnDisabled: {
     backgroundColor: '#d1d5db',
-    shadowOpacity: 0,
-    elevation: 0,
+    ...platformShadow('#000', 0, 0, 0, 0),
   },
   submitBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   successContainer: {

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useParent } from '../context/ParentContext';
+import { platformShadow } from '../styles/platformStyles';
 
 interface NavItem {
   label: string;
@@ -74,11 +75,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 12,
+    ...platformShadow('#000', -4, 0.08, 12, 12),
   },
   navItem: {
     flex: 1,

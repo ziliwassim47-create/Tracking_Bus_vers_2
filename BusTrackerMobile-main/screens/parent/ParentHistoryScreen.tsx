@@ -10,6 +10,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useParent, Trip } from '../../context/ParentContext';
 import ChildSwitcher from '../../components/ChildSwitcher';
 import ParentBottomNav from '../../components/ParentBottomNav';
+import { platformShadow } from '../../styles/platformStyles';
 
 type RootStackParamList = {
   ParentHome: undefined;
@@ -159,11 +160,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
-    shadowColor: '#14b8a6',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    elevation: 10,
+    ...platformShadow('#14b8a6', 6, 0.3, 14, 10),
   },
   backBtn: {
     color: '#e0fdf4',
@@ -196,11 +193,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 18,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
+    ...platformShadow('#000', 3, 0.08, 10, 4),
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#f3f4f6',

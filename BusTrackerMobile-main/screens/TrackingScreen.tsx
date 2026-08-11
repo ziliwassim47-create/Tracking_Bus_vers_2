@@ -4,6 +4,7 @@ import * as Location from "expo-location";
 import { io, Socket } from "socket.io-client";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { GOMAPS_API_KEY, SERVER_URL } from "../config";
+import { platformShadow, platformTextShadow } from "../styles/platformStyles";
 
 type Coordinate = {
   latitude: number;
@@ -183,11 +184,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
-    shadowColor: "#14b8a6",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 10,
+    ...platformShadow("#14b8a6", 6, 0.4, 12, 10),
     marginBottom: 20,
   },
   header: { 
@@ -197,9 +194,7 @@ const styles = StyleSheet.create({
     color: "#fff", 
     marginBottom: 6,
     letterSpacing: 0.8,
-    textShadowColor: "rgba(0,0,0,0.1)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    ...platformTextShadow("rgba(0,0,0,0.1)", 2, 4),
   },
   subtitle: {
     textAlign: "center",
@@ -221,11 +216,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     fontSize: 15,
     color: "#374151",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 4,
+    ...platformShadow("#000", 3, 0.1, 10, 4),
   },
   shareButton: {
     backgroundColor: "#14b8a6",
@@ -234,27 +225,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginHorizontal: 20,
     marginBottom: 15,
-    shadowColor: "#14b8a6",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+    ...platformShadow("#14b8a6", 6, 0.4, 12, 8),
     borderWidth: 2,
     borderColor: "#2dd4bf",
   },
   shareButtonActive: {
     backgroundColor: "#ef4444",
     borderColor: "#fca5a5",
-    shadowColor: "#ef4444",
+    ...platformShadow("#ef4444", 6, 0.4, 12, 8),
   },
   shareButtonText: {
     color: "#fff",
     fontSize: 17,
     fontWeight: "800",
     letterSpacing: 0.8,
-    textShadowColor: "rgba(0,0,0,0.1)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    ...platformTextShadow("rgba(0,0,0,0.1)", 1, 2),
   },
   infoContainer: {
     marginHorizontal: 20,

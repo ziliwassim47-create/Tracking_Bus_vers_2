@@ -7,6 +7,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Child, useParent } from '../context/ParentContext';
+import { platformShadow } from '../styles/platformStyles';
 
 // Returns initials from first+last name
 function getInitials(child: Child): string {
@@ -118,11 +119,7 @@ const styles = StyleSheet.create({
     minWidth: 90,
     borderWidth: 2,
     borderColor: '#f3f4f6',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 3,
+    ...platformShadow('#000', 2, 0.07, 8, 3),
     position: 'relative',
     overflow: 'hidden',
   },
@@ -138,11 +135,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    ...platformShadow('#000', 2, 0.15, 4, 3),
   },
   avatarCompact: {
     width: 40,

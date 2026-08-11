@@ -10,6 +10,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useParent, Child } from '../../context/ParentContext';
 import ParentBottomNav from '../../components/ParentBottomNav';
+import { platformShadow } from '../../styles/platformStyles';
 
 type RootStackParamList = {
   ParentHome: undefined;
@@ -186,11 +187,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
-    shadowColor: '#14b8a6',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 12,
+    ...platformShadow('#14b8a6', 8, 0.35, 16, 12),
   },
   backBtn: { color: '#e0fdf4', fontSize: 14, fontWeight: '600', marginBottom: 12 },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#ccfbf1', marginBottom: 16 },
@@ -237,11 +234,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 18,
     padding: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
+    ...platformShadow('#000', 3, 0.08, 10, 4),
     borderWidth: 1,
     borderColor: '#f3f4f6',
   },
@@ -272,11 +265,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     alignItems: 'center',
     borderLeftWidth: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 3,
+    ...platformShadow('#000', 2, 0.07, 8, 3),
     gap: 12,
   },
   childAvatar: {
