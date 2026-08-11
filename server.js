@@ -13,6 +13,7 @@ const ROOT = path.join(__dirname, 'www');
 const db = openDatabase();
 const sessions = new Map();
 const refreshTokens = new Map();
+const SERVER_INSTANCE_ID = crypto.randomUUID();
 const ACCESS_TOKEN_TTL_MS = positiveDuration(process.env.ACCESS_TOKEN_TTL_MS, 15 * 60 * 1000);
 const SESSION_TTL_MS = positiveDuration(process.env.SESSION_TTL_MS, 8 * 60 * 60 * 1000);
 
@@ -145,6 +146,7 @@ function issueSession(userId, sessionExpiresAt = Date.now() + SESSION_TTL_MS) {
   return {
     token: accessToken,
     refresh_token: refreshToken,
+    server_instance_id: SERVER_INSTANCE_ID,
     expires_at: new Date(session.accessExpiresAt).toISOString(),
     session_expires_at: new Date(session.sessionExpiresAt).toISOString()
   };
@@ -513,7 +515,7 @@ async function handleApi(req, res, url) {
   const pathname = url.pathname;
 
   if (req.method === 'GET' && pathname === '/api/health') {
-    return json(res, 200, { status: 'ok', database: 'sqlite', time: new Date().toISOString() });
+    return json(res, 200, { status: 'ok', database: 'sqlite', instance_id: SERVER_INSTANCE_ID, time: new Date().toISOString() });
   }
 
   // NOUV API Compatibility Routes

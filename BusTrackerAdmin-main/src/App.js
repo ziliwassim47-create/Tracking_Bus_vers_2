@@ -50,8 +50,8 @@ const ENTITIES = {
   },
   assignments: {
     title: 'Affectations', singular: 'affectation', endpoint: 'assignments',
-    columns: [['route_id', 'Trajet'], ['bus_id', 'Bus'], ['driver_id', 'Chauffeur'], ['assistant_id', 'Assistante'], ['starts_on', 'Début'], ['ends_on', 'Fin']],
-    fields: [['route_id', 'Trajet', 'route'], ['bus_id', 'Bus', 'bus'], ['driver_id', 'Chauffeur', 'driver'], ['assistant_id', 'Assistante', 'assistant'], ['starts_on', 'Date de début', 'date'], ['ends_on', 'Date de fin', 'date']]
+    columns: [['route_id', 'Trajet'], ['bus_id', 'Bus'], ['children', 'Enfants et arrêts'], ['driver_id', 'Chauffeur'], ['assistant_id', 'Assistante'], ['starts_on', 'Début'], ['ends_on', 'Fin']],
+    fields: [['route_id', 'Trajet', 'route'], ['route_children', 'Enfants affectés à ce trajet', 'routeChildren'], ['bus_id', 'Bus', 'bus'], ['driver_id', 'Chauffeur', 'driver'], ['assistant_id', 'Assistante', 'assistant'], ['starts_on', 'Date de début', 'date'], ['ends_on', 'Date de fin', 'date']]
   }
 };
 
@@ -71,6 +71,28 @@ function storeSession(session) {
 function expireSession() {
   localStorage.removeItem(TOKEN_KEY);
   publishSession(null);
+}
+
+async function restoreStoredSession() {
+  const current = readStoredSession();
+  if (!current?.token) return null;
+  const sessionExpiry = Date.parse(current.session_expires_at || '');
+  if (Number.isFinite(sessionExpiry) && sessionExpiry <= Date.now()) {
+    localStorage.removeItem(TOKEN_KEY);
+    return null;
+  }
+  try {
+    const response = await fetch(`${API_URL}/health`);
+    const health = await response.json().catch(() => ({}));
+    if (!response.ok || !current.server_instance_id || current.server_instance_id !== health.instance_id) {
+      localStorage.removeItem(TOKEN_KEY);
+      return null;
+    }
+    return current;
+  } catch {
+    localStorage.removeItem(TOKEN_KEY);
+    return null;
+  }
 }
 
 function apiError(payload, status) {
@@ -175,6 +197,14 @@ function Dashboard({ data }) {
   </>;
 }
 
+function childrenForRoute(lists, routeId) {
+  if (!routeId) return [];
+  return lists.routeStudents.filter(link => Number(link.route_id) === Number(routeId)).map(link => ({
+    student: lists.students.find(student => Number(student.id) === Number(link.student_id)),
+    stop: lists.stops.find(stop => Number(stop.id) === Number(link.stop_id))
+  })).filter(item => item.student);
+}
+
 function Field({ definition, form, setForm, lists }) {
   const [name, label, type, values] = definition;
   const value = form[name] ?? '';
@@ -186,6 +216,14 @@ function Field({ definition, form, setForm, lists }) {
     : type === 'student' ? lists.students.map(x => [x.id, `${x.first_name} ${x.last_name}`])
     : type === 'stop' ? lists.stops.filter(x => !form.route_id || Number(x.route_id) === Number(form.route_id)).map(x => [x.id, `${x.stop_order}. ${x.name}`])
     : null;
+  if (type === 'routeChildren') {
+    const assignedChildren = childrenForRoute(lists, form.route_id);
+    return <label>{label}<div className="related-list">
+      {!form.route_id && <span>Sélectionnez d’abord un trajet.</span>}
+      {form.route_id && !assignedChildren.length && <span>Aucun enfant affecté à ce trajet.</span>}
+      {assignedChildren.map(({ student, stop }) => <span key={student.id}>• {student.first_name} {student.last_name}{stop ? ` — ${stop.name}` : ''}</span>)}
+    </div></label>;
+  }
   return <label>{label}
     {type === 'select' ? <select value={value} onChange={e => setForm({ ...form, [name]: e.target.value })}><option value="">Sélectionner</option>{values.map(option => <option key={option} value={option}>{option}</option>)}</select>
       : selectOptions ? <select value={value} onChange={e => setForm({ ...form, [name]: e.target.value })}><option value="">Sélectionner</option>{selectOptions.map(([id, text]) => <option key={id} value={id}>{text}</option>)}</select>
@@ -216,6 +254,12 @@ function EntityPanel({ entity, token, lists, refresh, onUnauthorized }) {
   }
   const display = (row, key) => {
     if (key === 'active') return row[key] ? 'Oui' : 'Non';
+    if (key === 'children') {
+      const assignedChildren = childrenForRoute(lists, row.route_id);
+      return assignedChildren.length
+        ? assignedChildren.map(({ student, stop }) => `${student.first_name} ${student.last_name}${stop ? ` (${stop.name})` : ''}`).join(', ')
+        : 'Aucun enfant affecté';
+    }
     const maps = { route_id: lists.routes, bus_id: lists.buses, driver_id: lists.users, assistant_id: lists.users, parent_id: lists.users, student_id: lists.students, stop_id: lists.stops };
     if (maps[key]) { const item = maps[key].find(x => Number(x.id) === Number(row[key])); return item ? (item.name || item.label || `${item.first_name} ${item.last_name}`) : row[key]; }
     return row[key] ?? '—';
@@ -241,13 +285,21 @@ function AdminApp({ session, onLogout }) {
 }
 
 export default function App() {
-  const [session, setSession] = useState(readStoredSession);
+  const [session, setSession] = useState(null);
+  const [checkingSession, setCheckingSession] = useState(true);
   useEffect(() => {
+    let mounted = true;
     const updateSession = event => setSession(event.detail);
     window.addEventListener(SESSION_EVENT, updateSession);
-    return () => window.removeEventListener(SESSION_EVENT, updateSession);
+    void restoreStoredSession().then(restored => {
+      if (mounted) setSession(restored);
+    }).finally(() => {
+      if (mounted) setCheckingSession(false);
+    });
+    return () => { mounted = false; window.removeEventListener(SESSION_EVENT, updateSession); };
   }, []);
   const login = useCallback(result => { storeSession(result); setSession(result); }, []);
   const logout = useCallback(() => { expireSession(); setSession(null); }, []);
+  if (checkingSession) return <main className="login-page"><div className="login-card session-check">Vérification de la session…</div></main>;
   return session?.token ? <AdminApp session={session} onLogout={logout} /> : <Login onLogin={login} />;
 }

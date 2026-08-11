@@ -80,6 +80,10 @@ test('API métier et persistance SQLite', async t => {
 
   await waitForServer();
 
+  const health = await request('/health');
+  assert.equal(health.response.status, 200);
+  assert.ok(health.payload.instance_id);
+
   const parent = await login('parent@demo.tn');
   const assistant = await login('assistant@demo.tn');
   const admin = await login('admin@demo.tn');
@@ -87,6 +91,7 @@ test('API métier et persistance SQLite', async t => {
   const unassignedAssistant = await login('ines@demo.tn');
 
   assert.equal(parent.user.role, 'PARENT');
+  assert.equal(parent.server_instance_id, health.payload.instance_id);
   assert.equal(assistant.user.role, 'ASSISTANT');
   assert.equal(admin.user.role, 'ADMIN');
 
