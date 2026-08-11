@@ -118,6 +118,19 @@ test('API métier et persistance SQLite', async t => {
   assert.equal(assistantBootstrap.payload.user.role, 'ASSISTANT');
   assert.equal(assistantBootstrap.payload.currentTrip.assistant_id, assistant.user.id);
 
+  const preparedAssistantTrip = await request('/assistant/trips/prepare', {
+    method: 'POST',
+    body: JSON.stringify({ assignment_id: assistantBootstrap.payload.assignments[0].id })
+  }, assistant.token);
+  assert.equal(preparedAssistantTrip.response.status, 200);
+  assert.equal(preparedAssistantTrip.payload.id, assistantBootstrap.payload.currentTrip.id);
+
+  const forbiddenAssistantTrip = await request('/assistant/trips/prepare', {
+    method: 'POST',
+    body: JSON.stringify({ assignment_id: assistantBootstrap.payload.assignments[0].id })
+  }, unassignedAssistant.token);
+  assert.equal(forbiddenAssistantTrip.response.status, 404);
+
   const unauthorizedGps = await request('/gps', {
     method: 'POST',
     body: JSON.stringify({
@@ -508,6 +521,24 @@ test('API métier et persistance SQLite', async t => {
   });
   assert.equal(expiredSession.response.status, 401);
   assert.equal(expiredSession.payload.code, 'SESSION_EXPIRED');
+
+  const freshAssistant = await login('assistant@demo.tn');
+  const completedAssistantTrip = await request(`/trips/${assistantBootstrap.payload.currentTrip.id}/end`, {
+    method: 'POST'
+  }, freshAssistant.token);
+  assert.equal(completedAssistantTrip.response.status, 200);
+  const newAssistantTrip = await request('/assistant/trips/prepare', {
+    method: 'POST',
+    body: JSON.stringify({ assignment_id: assistantBootstrap.payload.assignments[0].id })
+  }, freshAssistant.token);
+  assert.equal(newAssistantTrip.response.status, 201);
+  assert.equal(newAssistantTrip.payload.status, 'PLANNED');
+  assert.notEqual(newAssistantTrip.payload.id, assistantBootstrap.payload.currentTrip.id);
+  const startedAssistantTrip = await request(`/trips/${newAssistantTrip.payload.id}/start`, {
+    method: 'POST'
+  }, freshAssistant.token);
+  assert.equal(startedAssistantTrip.response.status, 200);
+  assert.equal(startedAssistantTrip.payload.status, 'IN_PROGRESS');
 
   const schemaDb = new DatabaseSync(testDb);
   try {

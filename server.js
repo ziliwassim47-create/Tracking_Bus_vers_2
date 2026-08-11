@@ -819,6 +819,42 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true });
   }
 
+  if (req.method === 'POST' && pathname === '/api/assistant/trips/prepare') {
+    if (!requireRole(res, user, ['ASSISTANT'])) return;
+    const body = await readBody(req);
+    const assignment = db.prepare(`
+      SELECT a.id, a.idTrajet AS route_id, a.idBus AS bus_id, a.idChauffeur AS driver_id,
+        a.idAssistante AS assistant_id, b.statut AS bus_status
+      FROM Affectation a JOIN Bus b ON b.id = a.idBus
+      WHERE a.id = ? AND a.idAssistante = ? AND a.actif = 1
+    `).get(Number(body.assignment_id), user.id);
+    if (!assignment) return json(res, 404, { error: 'Ce bus n’est pas affecté à cette assistante' });
+    if (['MAINTENANCE', 'INACTIVE'].includes(assignment.bus_status)) {
+      return json(res, 409, { error: 'Ce bus ne peut pas démarrer dans son état actuel' });
+    }
+
+    const existing = db.prepare(`
+      SELECT id FROM ExecutionTrajet
+      WHERE idTrajet = ? AND idBus = ? AND idAssistante = ? AND statut IN ('PLANNED', 'IN_PROGRESS')
+      ORDER BY CASE statut WHEN 'IN_PROGRESS' THEN 0 ELSE 1 END, datetime(departPrevuLe) DESC
+      LIMIT 1
+    `).get(assignment.route_id, assignment.bus_id, user.id);
+    if (existing) return json(res, 200, findTripById(existing.id));
+
+    const direction = body.direction === 'AFTERNOON' ? 'AFTERNOON' : 'MORNING';
+    const result = db.prepare(`
+      INSERT INTO ExecutionTrajet(idTrajet, idBus, idChauffeur, idAssistante, sens, statut, departPrevuLe)
+      VALUES (?, ?, ?, ?, ?, 'PLANNED', ?)
+    `).run(assignment.route_id, assignment.bus_id, assignment.driver_id, user.id, direction, new Date().toISOString());
+    const tripId = Number(result.lastInsertRowid);
+    const stopStatement = db.prepare(`
+      INSERT INTO ArretExecution(idExecutionTrajet, idArret, statut) VALUES (?, ?, 'UPCOMING')
+    `);
+    all('SELECT id FROM Arret WHERE idTrajet = ? ORDER BY ordreArret', assignment.route_id)
+      .forEach(stop => stopStatement.run(tripId, stop.id));
+    return json(res, 201, findTripById(tripId));
+  }
+
   const tripActionMatch = pathname.match(/^\/api\/trips\/(\d+)\/(start|end)$/);
   if (req.method === 'POST' && tripActionMatch) {
     const trip = findTripById(tripActionMatch[1]);

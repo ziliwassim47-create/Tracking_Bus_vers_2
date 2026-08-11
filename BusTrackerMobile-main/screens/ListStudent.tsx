@@ -59,15 +59,21 @@ interface StudentEvent {
   event_type: string;
 }
 
+interface Bus {
+  id: number;
+  registration: string;
+  label: string;
+  status: string;
+}
+
 interface Bootstrap {
+  buses: Bus[];
   assignments: Assignment[];
   trips: Trip[];
   students: Student[];
   routeStudents: RouteStudent[];
   studentEvents: StudentEvent[];
 }
-
-const BUS_OPTIONS = ['1', '2', '3', '4'];
 
 export default function ListStudent({ navigation }: Readonly<Props>) {
   const [data, setData] = useState<Bootstrap | null>(null);
@@ -82,7 +88,7 @@ export default function ListStudent({ navigation }: Readonly<Props>) {
       .then(payload => {
         const activeAssignments = payload.assignments.filter(item => Boolean(item.active));
         setData({ ...payload, assignments: activeAssignments });
-        setSelectedBus(activeAssignments[0] ? String(activeAssignments[0].bus_id) : '1');
+        setSelectedBus(activeAssignments[0] ? String(activeAssignments[0].bus_id) : String(payload.buses[0]?.id || ''));
       })
       .catch(err => setError(err instanceof Error ? err.message : 'Chargement impossible'))
       .finally(() => setLoading(false));
@@ -115,27 +121,32 @@ export default function ListStudent({ navigation }: Readonly<Props>) {
   }, [assignedStudents, data?.studentEvents, selectedTrip?.id]);
 
   const validateAndStart = async () => {
-    if (!selectedAssignment || !selectedTrip) {
-      Alert.alert('Trajet indisponible', 'Aucun trajet planifié pour cette affectation.');
+    if (!selectedAssignment) {
+      Alert.alert('Bus non affecté', 'Ce bus n’est pas affecté à cette assistante.');
       return;
     }
     setSaving(true);
     setError('');
     try {
+      const trip = selectedTrip || await authenticatedRequest<Trip>('/assistant/trips/prepare', {
+        method: 'POST',
+        body: JSON.stringify({ assignment_id: selectedAssignment.id }),
+      });
       await Promise.all(assignedStudents.map(student => authenticatedRequest('/student-events', {
         method: 'POST',
         body: JSON.stringify({
-          trip_id: selectedTrip.id,
+          trip_id: trip.id,
           student_id: student.id,
           event_type: presence[student.id] ? 'BOARDED' : 'ABSENT',
         }),
       })));
-      if (selectedTrip.status !== 'IN_PROGRESS') {
-        await authenticatedRequest(`/trips/${selectedTrip.id}/start`, { method: 'POST' });
+      if (trip.status !== 'IN_PROGRESS') {
+        await authenticatedRequest(`/trips/${trip.id}/start`, { method: 'POST' });
       }
+      setData(current => current ? { ...current, trips: [trip, ...current.trips.filter(item => item.id !== trip.id)] } : current);
       navigation.navigate('Tracking', {
         selectedBus: String(selectedAssignment.bus_id),
-        tripId: selectedTrip.id,
+        tripId: trip.id,
         tripStatus: 'IN_PROGRESS',
       });
     } catch (err) {
@@ -170,11 +181,11 @@ export default function ListStudent({ navigation }: Readonly<Props>) {
           <Text style={styles.label}>Sélectionner un bus</Text>
           <View style={styles.pickerShell}>
             <Picker selectedValue={selectedBus} onValueChange={value => setSelectedBus(String(value))} style={styles.picker}>
-              {BUS_OPTIONS.map(bus => <Picker.Item key={bus} value={bus} label={`🚌 Bus ${bus}`} />)}
+              {(data?.buses || []).slice(0, 4).map(bus => <Picker.Item key={bus.id} value={String(bus.id)} label={`🚌 ${bus.label} · ${bus.registration}`} />)}
             </Picker>
           </View>
           {selectedAssignment
-            ? <View style={styles.routeInfo}><Text style={styles.routeName}>Bus {selectedBus} · {selectedAssignment.route_name}</Text><Text style={styles.routeMeta}>{selectedAssignment.registration} · {selectedTrip?.status === 'IN_PROGRESS' ? 'Trajet en cours' : selectedTrip ? 'Prêt à démarrer' : 'Aucun départ planifié'}</Text></View>
+            ? <View style={styles.routeInfo}><Text style={styles.routeName}>Bus {selectedBus} · {selectedAssignment.route_name}</Text><Text style={styles.routeMeta}>{selectedAssignment.registration} · {selectedTrip?.status === 'IN_PROGRESS' ? 'Trajet en cours' : selectedTrip ? 'Prêt à démarrer' : 'Nouveau trajet disponible'}</Text></View>
             : <View style={styles.unassignedInfo}><Text style={styles.unassignedText}>Ce bus n’est pas affecté à cette assistante.</Text></View>}
         </View>
 
@@ -206,8 +217,8 @@ export default function ListStudent({ navigation }: Readonly<Props>) {
         </View> : <View style={styles.emptyCard}><Text style={styles.emptyIcon}>📋</Text><Text style={styles.emptyText}>Aucun enfant affecté au Bus {selectedBus} pour cette assistante.</Text></View>}
 
         <TouchableOpacity
-          style={[styles.startButton, (!assignedStudents.length || !selectedTrip || saving) && styles.startButtonDisabled]}
-          disabled={!assignedStudents.length || !selectedTrip || saving}
+          style={[styles.startButton, (!assignedStudents.length || !selectedAssignment || saving) && styles.startButtonDisabled]}
+          disabled={!assignedStudents.length || !selectedAssignment || saving}
           onPress={validateAndStart}
         ><Text style={styles.startButtonText}>{saving ? 'Enregistrement…' : selectedTrip?.status === 'IN_PROGRESS' ? '✓ Valider et continuer le trajet' : '✓ Valider et démarrer le trajet'}</Text></TouchableOpacity>
       </ScrollView>

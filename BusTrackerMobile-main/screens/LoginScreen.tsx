@@ -12,7 +12,6 @@ import {
   KeyboardAvoidingView,
   ScrollView,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { platformShadow, platformTextShadow } from '../styles/platformStyles';
 import { API_BASE_URL } from '../config';
@@ -135,11 +134,7 @@ export default function LoginScreen(props: Readonly<LoginScreenProps>) {
               style={styles.passwordToggle}
               activeOpacity={0.7}
             >
-              <Icon
-                name={showPassword ? 'visibility-off' : 'visibility'}
-                size={24}
-                color="#14b8a6"
-              />
+              <Text style={styles.passwordToggleText}>{showPassword ? '🙈' : '👁️'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -282,6 +277,9 @@ const styles = StyleSheet.create({
     zIndex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  passwordToggleText: {
+    fontSize: 20,
   },
   optionsRow: {
     flexDirection: 'row',
