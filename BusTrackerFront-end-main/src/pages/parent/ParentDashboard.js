@@ -94,7 +94,7 @@ export default function ParentDashboard() {
           <div className="parent-child-list">
             {data.students.map(child => {
               const active = Number(child.id) === Number(selectedChildId);
-              return <button key={child.id} className={`parent-child-card ${active ? 'active' : ''}`} onClick={() => setSelectedChildId(child.id)}>
+              return <button key={child.id} className={`parent-child-card ${active ? 'active' : ''}`} aria-pressed={active} onClick={() => setSelectedChildId(child.id)}>
                 <span className="parent-child-avatar">{child.first_name?.[0]}{child.last_name?.[0]}</span>
                 <span><strong>{child.first_name} {child.last_name}</strong><small>{child.school_class || 'Classe non renseignée'}</small></span>
                 <span className="parent-child-arrow">›</span>

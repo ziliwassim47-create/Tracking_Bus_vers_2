@@ -213,8 +213,18 @@ export default function LoginPage() {
 
         @media (max-width: 700px) {
           .login-hero { display: none; }
-          .login-card { width: 100%; border-radius: 24px; }
-          .login-wrapper { border-radius: 24px; }
+          .login-bg { padding: 12px; align-items: flex-start; padding-top: max(20px, env(safe-area-inset-top)); overflow-y: auto; }
+          .login-card { width: 100%; padding: 30px 22px; border-radius: 20px; }
+          .login-wrapper { max-width: 440px; border-radius: 20px; }
+          .login-card-header { margin-bottom: 22px; }
+          .login-card-logo { font-size: 36px; margin-bottom: 8px; }
+          .login-card .form-control { min-height: 48px; font-size: 16px; }
+          .login-card .btn { min-height: 48px; }
+        }
+        @media (max-width: 360px) {
+          .login-card { padding: 24px 16px; }
+          .login-card-title { font-size: 20px; }
+          .login-hint { line-height: 1.8; }
         }
       `}</style>
     </div>

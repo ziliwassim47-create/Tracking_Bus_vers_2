@@ -81,15 +81,19 @@
 /* ─── Reset ──────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { font-size: 16px; scroll-behavior: smooth; }
+html { min-height: 100%; font-size: 16px; scroll-behavior: smooth; }
 
 body {
+  min-height: 100%;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--color-bg);
   color: var(--color-text);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
+
+#root { min-height: 100vh; }
 
 /* ─── App Shell ──────────────────────────────────────────────────── */
 .app-shell {
@@ -779,6 +783,20 @@ textarea.form-control { resize: vertical; min-height: 100px; }
   .main-content { margin-left: 0; }
   .kpi-grid { grid-template-columns: 1fr 1fr; }
   .page-content { padding: 16px; }
+  input, select, textarea { font-size: 16px; }
+  .btn, button { min-height: 44px; }
+  .modal-overlay { padding: 12px; }
+  .modal { width: 100%; max-height: calc(100vh - 24px); overflow-y: auto; }
+  .toast-container { left: 12px; right: 12px; bottom: 12px; }
+  .toast { width: 100%; max-width: none; }
+}
+
+@media (max-width: 480px) {
+  .page-content { padding: 12px; }
+  .kpi-grid { grid-template-columns: 1fr; }
+  .card-header, .card-body { padding-left: 14px; padding-right: 14px; }
+  .topbar { padding: 0 14px; }
+  .topbar-title { font-size: 17px; }
 }
 
 /* ─── Leaflet Map override ───────────────────────────────────────── */

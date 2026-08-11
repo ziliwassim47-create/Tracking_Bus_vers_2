@@ -190,10 +190,10 @@ function Dashboard({ data }) {
   ];
   return <><div className="page-heading"><div><h2>Vue d’ensemble</h2><p>État actuel de l’établissement et des trajets.</p></div></div>
     <div className="metrics">{counts.map(([label, value]) => <article className="metric" key={label}><strong>{value}</strong><span>{label}</span></article>)}</div>
-    <section className="panel"><h3>Trajets enregistrés</h3><table><thead><tr><th>Code</th><th>Trajet</th><th>Départ</th><th>Destination</th><th>Heure</th></tr></thead><tbody>
-      {(data.routes || []).map(route => <tr key={route.id}><td>{route.code}</td><td>{route.name}</td><td>{route.origin}</td><td>{route.destination}</td><td>{route.morning_time}</td></tr>)}
-      {!data.routes?.length && <tr key="empty-routes"><td colSpan="5">Aucun trajet.</td></tr>}
-    </tbody></table></section>
+    <section className="panel"><h3>Trajets enregistrés</h3><div className="table-wrap"><table><thead><tr><th>Code</th><th>Trajet</th><th>Départ</th><th>Destination</th><th>Heure</th></tr></thead><tbody>
+      {(data.routes || []).map(route => <tr key={route.id}><td data-label="Code">{route.code}</td><td data-label="Trajet">{route.name}</td><td data-label="Départ">{route.origin}</td><td data-label="Destination">{route.destination}</td><td data-label="Heure">{route.morning_time}</td></tr>)}
+      {!data.routes?.length && <tr className="empty-row" key="empty-routes"><td colSpan="5">Aucun trajet.</td></tr>}
+    </tbody></table></div></section>
   </>;
 }
 
@@ -276,8 +276,8 @@ function EntityPanel({ entity, token, lists, refresh, onUnauthorized }) {
   };
   return <><div className="page-heading"><div><h2>{config.title}</h2><p>Ajout, consultation et suppression des {config.title.toLowerCase()}.</p></div></div>
     <div className="admin-grid"><section className="panel"><h3>Liste</h3>{error && <p className="error">{error}</p>}<div className="table-wrap"><table><thead><tr>{config.columns.map(([, label]) => <th key={label}>{label}</th>)}<th></th></tr></thead><tbody>
-      {rows.map((row, index) => <tr key={row.id ?? row.identifier ?? `${config.endpoint}-${index}`}>{config.columns.map(([key]) => <td key={key}>{display(row, key)}</td>)}<td><button className="danger" onClick={() => remove(row)}>Supprimer</button></td></tr>)}
-      {!rows.length && <tr key={`empty-${config.endpoint}`}><td colSpan={config.columns.length + 1}>Aucune donnée.</td></tr>}
+      {rows.map((row, index) => <tr key={row.id ?? row.identifier ?? `${config.endpoint}-${index}`}>{config.columns.map(([key, label]) => <td key={key} data-label={label}>{display(row, key)}</td>)}<td className="table-actions" data-label="Actions"><button className="danger" onClick={() => remove(row)}>Supprimer</button></td></tr>)}
+      {!rows.length && <tr className="empty-row" key={`empty-${config.endpoint}`}><td colSpan={config.columns.length + 1}>Aucune donnée.</td></tr>}
     </tbody></table></div></section>
     <form className="panel form-panel" onSubmit={create}><h3>Ajouter un {config.singular}</h3>{config.fields.map(field => <Field key={field[0]} definition={field} form={form} setForm={setForm} lists={lists} />)}<button disabled={busy}>{busy ? 'Enregistrement…' : 'Ajouter'}</button></form></div>
   </>;
@@ -291,7 +291,7 @@ function AdminApp({ session, onLogout }) {
   }, [onLogout, session.token]);
   useEffect(() => { refresh(); }, [refresh]);
   const nav = [['dashboard', 'Vue d’ensemble'], ...Object.entries(ENTITIES).map(([key, value]) => [key, value.title])];
-  return <div className="shell"><aside><div className="brand">🚌 <span>BusTracker</span></div><p className="role">Administration</p><nav>{nav.map(([key, label]) => <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{label}</button>)}</nav><div className="account"><strong>{session.user?.first_name} {session.user?.last_name}</strong><button onClick={onLogout}>Déconnexion</button></div></aside><main>{error && <p className="error">{error}</p>}{tab === 'dashboard' ? <Dashboard data={data} /> : <EntityPanel entity={tab} token={session.token} lists={data} refresh={refresh} onUnauthorized={onLogout} />}</main></div>;
+  return <div className="shell"><aside><div className="brand">🚌 <span>BusTracker</span></div><p className="role">Administration</p><nav aria-label="Sections d’administration">{nav.map(([key, label]) => <button key={key} className={tab === key ? 'active' : ''} aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)}>{label}</button>)}</nav><div className="account"><strong>{session.user?.first_name} {session.user?.last_name}</strong><button onClick={onLogout}>Déconnexion</button></div></aside><main>{error && <p className="error">{error}</p>}{tab === 'dashboard' ? <Dashboard data={data} /> : <EntityPanel entity={tab} token={session.token} lists={data} refresh={refresh} onUnauthorized={onLogout} />}</main></div>;
 }
 
 export default function App() {
