@@ -1,24 +1,26 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { apiFetch } from '../utils';
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const navigate = useNavigate();
+  const [phone, setPhone] = useState('20200200');
+  const [password, setPassword] = useState('demo1234');
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!email || !password) { setError('Veuillez remplir tous les champs'); return; }
+    if (!phone.trim() || !password) { setError('Veuillez remplir tous les champs'); return; }
     setLoading(true);
     setError('');
     try {
       const data = await apiFetch('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ phone: phone.trim(), password }),
       });
       if (data.user?.role !== 'PARENT') {
         throw new Error('Cet espace est réservé aux parents.');
@@ -34,6 +36,7 @@ export default function LoginPage() {
           tlf: data.user.phone,
         },
       });
+      navigate('/parent', { replace: true });
     } catch (err) {
       setError(err.message || 'Identifiants invalides');
     } finally {
@@ -78,14 +81,15 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label className="form-label">📧 Email</label>
+              <label className="form-label">📱 Téléphone</label>
               <input
                 className="form-control"
-                type="email"
-                placeholder="exemple@educanet.tn"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                autoComplete="username"
+                type="tel"
+                inputMode="tel"
+                placeholder="Ex. 20200200"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                autoComplete="tel"
               />
             </div>
 
@@ -124,7 +128,7 @@ export default function LoginPage() {
           </form>
 
           <p className="login-hint">
-            Mot de passe de test : <code>demo1234</code>
+            Compte test : <code>20200200</code> / <code>demo1234</code>
           </p>
         </div>
       </div>
