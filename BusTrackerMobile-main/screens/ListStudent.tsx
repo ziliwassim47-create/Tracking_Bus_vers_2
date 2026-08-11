@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Cell, Table, TableWrapper } from 'react-native-table-component';
 import type { AssistantStackParamList } from '../App';
 import { platformShadow, platformTextShadow } from '../styles/platformStyles';
 import { authenticatedRequest } from '../utils/session';
@@ -66,11 +67,11 @@ interface Bootstrap {
   studentEvents: StudentEvent[];
 }
 
-const assignmentKey = (assignment: Assignment) => `${assignment.route_id}:${assignment.bus_id}`;
+const BUS_OPTIONS = ['1', '2', '3', '4'];
 
 export default function ListStudent({ navigation }: Readonly<Props>) {
   const [data, setData] = useState<Bootstrap | null>(null);
-  const [selectedKey, setSelectedKey] = useState('');
+  const [selectedBus, setSelectedBus] = useState('1');
   const [presence, setPresence] = useState<Record<number, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -81,14 +82,14 @@ export default function ListStudent({ navigation }: Readonly<Props>) {
       .then(payload => {
         const activeAssignments = payload.assignments.filter(item => Boolean(item.active));
         setData({ ...payload, assignments: activeAssignments });
-        setSelectedKey(activeAssignments[0] ? assignmentKey(activeAssignments[0]) : '');
+        setSelectedBus(activeAssignments[0] ? String(activeAssignments[0].bus_id) : '1');
       })
       .catch(err => setError(err instanceof Error ? err.message : 'Chargement impossible'))
       .finally(() => setLoading(false));
   }, []);
 
-  const selectedAssignment = useMemo(() => data?.assignments.find(item => assignmentKey(item) === selectedKey) || null,
-    [data, selectedKey]);
+  const selectedAssignment = useMemo(() => data?.assignments.find(item => item.bus_id === Number(selectedBus)) || null,
+    [data, selectedBus]);
 
   const selectedTrip = useMemo(() => {
     if (!data || !selectedAssignment) return null;
@@ -156,7 +157,7 @@ export default function ListStudent({ navigation }: Readonly<Props>) {
     <View style={styles.container}>
       <View style={styles.headerContainer}>
         <View style={styles.headerTop}>
-          <View><Text style={styles.kicker}>Espace Assistante</Text><Text style={styles.header}>Présences</Text></View>
+          <View><Text style={styles.kicker}>Espace Assistante</Text><Text style={styles.header}>Pointage</Text></View>
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}><Text style={styles.logoutButtonText}>Déconnexion</Text></TouchableOpacity>
         </View>
         <Text style={styles.subtitle}>Vérifiez les enfants avant de démarrer le trajet</Text>
@@ -166,15 +167,15 @@ export default function ListStudent({ navigation }: Readonly<Props>) {
         {error ? <Text style={styles.error}>⚠️ {error}</Text> : null}
 
         <View style={styles.assignmentCard}>
-          <Text style={styles.label}>Bus et trajet affectés</Text>
-          {data?.assignments.length ? (
-            <View style={styles.pickerShell}>
-              <Picker selectedValue={selectedKey} onValueChange={value => setSelectedKey(String(value))} style={styles.picker}>
-                {data.assignments.map(item => <Picker.Item key={assignmentKey(item)} value={assignmentKey(item)} label={`🚌 ${item.bus_label} · ${item.route_code}`} />)}
-              </Picker>
-            </View>
-          ) : <Text style={styles.emptyText}>Aucune affectation active pour ce compte.</Text>}
-          {selectedAssignment ? <View style={styles.routeInfo}><Text style={styles.routeName}>{selectedAssignment.route_name}</Text><Text style={styles.routeMeta}>{selectedAssignment.registration} · {selectedTrip?.status === 'IN_PROGRESS' ? 'Trajet en cours' : selectedTrip ? 'Prêt à démarrer' : 'Aucun départ planifié'}</Text></View> : null}
+          <Text style={styles.label}>Sélectionner un bus</Text>
+          <View style={styles.pickerShell}>
+            <Picker selectedValue={selectedBus} onValueChange={value => setSelectedBus(String(value))} style={styles.picker}>
+              {BUS_OPTIONS.map(bus => <Picker.Item key={bus} value={bus} label={`🚌 Bus ${bus}`} />)}
+            </Picker>
+          </View>
+          {selectedAssignment
+            ? <View style={styles.routeInfo}><Text style={styles.routeName}>Bus {selectedBus} · {selectedAssignment.route_name}</Text><Text style={styles.routeMeta}>{selectedAssignment.registration} · {selectedTrip?.status === 'IN_PROGRESS' ? 'Trajet en cours' : selectedTrip ? 'Prêt à démarrer' : 'Aucun départ planifié'}</Text></View>
+            : <View style={styles.unassignedInfo}><Text style={styles.unassignedText}>Ce bus n’est pas affecté à cette assistante.</Text></View>}
         </View>
 
         <View style={styles.sectionHeading}>
@@ -182,21 +183,29 @@ export default function ListStudent({ navigation }: Readonly<Props>) {
           <View style={styles.countBadge}><Text style={styles.countText}>{assignedStudents.length}</Text></View>
         </View>
 
-        {assignedStudents.length ? <View style={styles.studentList}>
-          {assignedStudents.map(student => {
-            const isPresent = Boolean(presence[student.id]);
-            return <View key={student.id} style={styles.studentCard}>
-              <View style={styles.avatar}><Text style={styles.avatarText}>{student.first_name[0]}{student.last_name[0]}</Text></View>
-              <View style={styles.studentInfo}><Text style={styles.studentName}>{student.first_name} {student.last_name}</Text><Text style={styles.studentClass}>{student.school_class || 'Classe non renseignée'}</Text></View>
-              <TouchableOpacity
+        {assignedStudents.length ? <View style={styles.tableContainer}>
+          <Table borderStyle={styles.tableBorder}>
+            <TableWrapper style={styles.tableHeaderRow}>
+              <Cell data="Nom et prénom" flex={2.2} style={styles.tableHeaderCell} textStyle={styles.tableHeaderText} />
+              <Cell data="Classe" flex={1} style={styles.tableHeaderCell} textStyle={styles.tableHeaderText} />
+              <Cell data="Présence" flex={1.25} style={styles.tableHeaderCell} textStyle={styles.tableHeaderText} />
+            </TableWrapper>
+            {assignedStudents.map((student, index) => {
+              const isPresent = Boolean(presence[student.id]);
+              const control = <TouchableOpacity
                 accessibilityRole="switch"
                 accessibilityState={{ checked: isPresent }}
                 style={[styles.presenceButton, isPresent && styles.presenceButtonActive]}
                 onPress={() => setPresence(current => ({ ...current, [student.id]: !current[student.id] }))}
-              ><Text style={[styles.presenceText, isPresent && styles.presenceTextActive]}>{isPresent ? '✓ Présent' : '✕ Absent'}</Text></TouchableOpacity>
-            </View>;
-          })}
-        </View> : <View style={styles.emptyCard}><Text style={styles.emptyIcon}>📋</Text><Text style={styles.emptyText}>Aucun enfant affecté à ce bus et à ce trajet.</Text></View>}
+              ><Text style={[styles.presenceText, isPresent && styles.presenceTextActive]}>{isPresent ? '✓' : '✕'}</Text></TouchableOpacity>;
+              return <TableWrapper key={student.id} style={[styles.tableRow, index % 2 === 0 && styles.tableRowEven]}>
+                <Cell data={`${student.first_name} ${student.last_name}`} flex={2.2} style={styles.tableCell} textStyle={styles.tableNameText} />
+                <Cell data={student.school_class || '—'} flex={1} style={styles.tableCell} textStyle={styles.tableCellText} />
+                <Cell data={control} flex={1.25} style={styles.tableCell} />
+              </TableWrapper>;
+            })}
+          </Table>
+        </View> : <View style={styles.emptyCard}><Text style={styles.emptyIcon}>📋</Text><Text style={styles.emptyText}>Aucun enfant affecté au Bus {selectedBus} pour cette assistante.</Text></View>}
 
         <TouchableOpacity
           style={[styles.startButton, (!assignedStudents.length || !selectedTrip || saving) && styles.startButtonDisabled]}
@@ -228,19 +237,24 @@ const styles = StyleSheet.create({
   routeInfo:{marginTop:12,padding:12,borderRadius:12,backgroundColor:'#ecfdf5'},
   routeName:{color:'#0f766e',fontSize:14,fontWeight:'800'},
   routeMeta:{color:'#64748b',fontSize:11,fontWeight:'600',marginTop:3},
+  unassignedInfo:{marginTop:12,padding:12,borderRadius:12,backgroundColor:'#fff7ed'},
+  unassignedText:{color:'#c2410c',fontSize:12,fontWeight:'700'},
   sectionHeading:{marginTop:20,marginBottom:10,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   sectionTitle:{color:'#1e293b',fontSize:17,fontWeight:'900'},
   sectionSubtitle:{color:'#64748b',fontSize:11,fontWeight:'500',marginTop:2},
   countBadge:{minWidth:32,height:32,paddingHorizontal:8,alignItems:'center',justifyContent:'center',borderRadius:16,backgroundColor:'#ccfbf1'},
   countText:{color:'#0f766e',fontWeight:'900'},
-  studentList:{gap:10},
-  studentCard:{minHeight:78,padding:12,flexDirection:'row',alignItems:'center',gap:11,borderRadius:16,backgroundColor:'#fff',borderWidth:1.5,borderColor:'#e5e7eb',...platformShadow('#000',2,.06,7,3)},
-  avatar:{width:44,height:44,flexShrink:0,alignItems:'center',justifyContent:'center',borderRadius:22,backgroundColor:'#14b8a6'},
-  avatarText:{color:'#fff',fontSize:14,fontWeight:'900'},
-  studentInfo:{flex:1,minWidth:0},
-  studentName:{color:'#1e293b',fontSize:14,fontWeight:'800'},
-  studentClass:{color:'#64748b',fontSize:11,fontWeight:'600',marginTop:3},
-  presenceButton:{minWidth:85,minHeight:40,paddingHorizontal:10,alignItems:'center',justifyContent:'center',borderRadius:13,borderWidth:1.5,borderColor:'#fca5a5',backgroundColor:'#fee2e2'},
+  tableContainer:{overflow:'hidden',borderRadius:16,backgroundColor:'#fff',borderWidth:1.5,borderColor:'#e5e7eb',...platformShadow('#000',3,.08,10,4)},
+  tableBorder:{borderWidth:0},
+  tableHeaderRow:{minHeight:52,flexDirection:'row',backgroundColor:'#14b8a6'},
+  tableHeaderCell:{minHeight:52,paddingHorizontal:7,alignItems:'center',justifyContent:'center',borderRightWidth:1,borderRightColor:'#0d9488'},
+  tableHeaderText:{color:'#fff',fontSize:11,fontWeight:'900',textAlign:'center'},
+  tableRow:{minHeight:62,flexDirection:'row',backgroundColor:'#fff',borderTopWidth:1,borderTopColor:'#e5e7eb'},
+  tableRowEven:{backgroundColor:'#f8fafc'},
+  tableCell:{minHeight:62,paddingHorizontal:7,alignItems:'center',justifyContent:'center',borderRightWidth:1,borderRightColor:'#eef2f7'},
+  tableNameText:{width:'100%',color:'#1e293b',fontSize:12,fontWeight:'800'},
+  tableCellText:{color:'#475569',fontSize:11,fontWeight:'700',textAlign:'center'},
+  presenceButton:{width:42,minHeight:36,alignItems:'center',justifyContent:'center',borderRadius:11,borderWidth:1.5,borderColor:'#fca5a5',backgroundColor:'#fee2e2'},
   presenceButtonActive:{borderColor:'#6ee7b7',backgroundColor:'#d1fae5'},
   presenceText:{color:'#dc2626',fontSize:11,fontWeight:'900'},
   presenceTextActive:{color:'#059669'},
