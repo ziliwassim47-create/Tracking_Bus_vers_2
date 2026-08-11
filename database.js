@@ -52,7 +52,7 @@ const COLUMN_RENAMES = {
     route_id: 'idTrajet', name: 'nom', address: 'adresse', stop_order: 'ordreArret', planned_offset_min: 'estimationTemps'
   },
   TrajetEnfant: {
-    route_id: 'idTrajet', student_id: 'idEnfant', stop_id: 'idArret', active: 'actif', assigned_at: 'affecteLe'
+    route_id: 'idTrajet', student_id: 'idEnfant', bus_id: 'idBus', stop_id: 'idArret', active: 'actif', assigned_at: 'affecteLe'
   },
   Affectation: {
     route_id: 'idTrajet', bus_id: 'idBus', driver_id: 'idChauffeur', assistant_id: 'idAssistante',
@@ -148,12 +148,21 @@ function completeFrenchSchema(db) {
   addColumn(db, 'Utilisateur', 'identifiant INTEGER');
   addColumn(db, 'Trajet', 'tempsTotalEstime REAL');
   addColumn(db, 'Enfant', 'idEtablissement INTEGER REFERENCES Etablissement(id) ON DELETE SET NULL');
+  addColumn(db, 'TrajetEnfant', 'idBus INTEGER REFERENCES Bus(id) ON DELETE RESTRICT');
   addColumn(db, 'PresenceEnfant', 'heureMontee TEXT');
   addColumn(db, 'PresenceEnfant', 'heureDescente TEXT');
   addColumn(db, 'Incident', 'retardMinutes INTEGER NOT NULL DEFAULT 0');
   db.exec(`
     UPDATE Utilisateur SET identifiant = id WHERE identifiant IS NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_utilisateur_identifiant ON Utilisateur(identifiant);
+    DROP INDEX IF EXISTS idx_affectation_trajet_actif;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_affectation_trajet_bus_actif
+      ON Affectation(idTrajet, idBus) WHERE actif = 1;
+    UPDATE TrajetEnfant SET idBus = (
+      SELECT a.idBus FROM Affectation a
+      WHERE a.idTrajet = TrajetEnfant.idTrajet AND a.actif = 1
+      ORDER BY a.id LIMIT 1
+    ) WHERE idBus IS NULL;
     INSERT OR IGNORE INTO Parent(id) SELECT id FROM Utilisateur WHERE typeCompte = 'PARENT';
     INSERT OR IGNORE INTO Administrateur(id) SELECT id FROM Utilisateur WHERE typeCompte = 'ADMIN';
     INSERT OR IGNORE INTO Chauffeur(id) SELECT id FROM Utilisateur WHERE typeCompte = 'DRIVER';
@@ -273,16 +282,16 @@ function seedDatabase(db) {
       Number(arretStmt.run(3, 'École Educanet', 'École Educanet', 36.8151, 10.1886, 3, 25).lastInsertRowid)
     ];
 
-    const trajetEnfantStmt = db.prepare('INSERT INTO TrajetEnfant(idTrajet, idEnfant, idArret) VALUES (?, ?, ?)');
-    trajetEnfantStmt.run(1, 1, routeAStopIds[2]);
-    trajetEnfantStmt.run(1, 2, routeAStopIds[2]);
-    trajetEnfantStmt.run(1, 9, routeAStopIds[2]);
-    trajetEnfantStmt.run(1, 3, routeAStopIds[2]);
-    trajetEnfantStmt.run(1, 4, routeAStopIds[3]);
-    trajetEnfantStmt.run(2, 5, routeBStopIds[1]);
-    trajetEnfantStmt.run(2, 6, routeBStopIds[2]);
-    trajetEnfantStmt.run(3, 7, routeCStopIds[1]);
-    trajetEnfantStmt.run(3, 8, routeCStopIds[2]);
+    const trajetEnfantStmt = db.prepare('INSERT INTO TrajetEnfant(idTrajet, idEnfant, idBus, idArret) VALUES (?, ?, ?, ?)');
+    trajetEnfantStmt.run(1, 1, 1, routeAStopIds[2]);
+    trajetEnfantStmt.run(1, 2, 1, routeAStopIds[2]);
+    trajetEnfantStmt.run(1, 9, 1, routeAStopIds[2]);
+    trajetEnfantStmt.run(1, 3, 1, routeAStopIds[2]);
+    trajetEnfantStmt.run(1, 4, 1, routeAStopIds[3]);
+    trajetEnfantStmt.run(2, 5, 2, routeBStopIds[1]);
+    trajetEnfantStmt.run(2, 6, 2, routeBStopIds[2]);
+    trajetEnfantStmt.run(3, 7, 3, routeCStopIds[1]);
+    trajetEnfantStmt.run(3, 8, 3, routeCStopIds[2]);
 
     db.prepare(`
       INSERT INTO Affectation(idTrajet, idBus, idChauffeur, idAssistante, debutLe)

@@ -43,15 +43,15 @@ const ENTITIES = {
     fields: [['parent_id', 'Parent', 'parent'], ['first_name', 'Prénom', 'text'], ['last_name', 'Nom', 'text'], ['school_class', 'Classe', 'text'], ['home_address', 'Adresse', 'text'], ['home_lat', 'Latitude', 'number'], ['home_lng', 'Longitude', 'number']]
   },
   routeStudents: {
-    title: 'Enfants par trajet', singular: 'affectation enfant', endpoint: 'route-students',
-    columns: [['route_id', 'Trajet'], ['student_id', 'Enfant'], ['stop_id', 'Arrêt']],
-    fields: [['route_id', 'Trajet', 'route'], ['student_id', 'Enfant', 'student'], ['stop_id', 'Arrêt de prise en charge', 'stop']],
+    title: 'Enfants par bus et trajet', singular: 'affectation enfant', endpoint: 'route-students',
+    columns: [['route_id', 'Trajet'], ['bus_id', 'Bus'], ['student_id', 'Enfant'], ['stop_id', 'Arrêt']],
+    fields: [['route_id', 'Trajet', 'route'], ['bus_id', 'Bus affecté au trajet', 'routeBus'], ['student_id', 'Enfant', 'student'], ['stop_id', 'Arrêt de prise en charge', 'stop']],
     removePath: row => `/route-students/${row.route_id}/${row.student_id}`
   },
   assignments: {
     title: 'Affectations', singular: 'affectation', endpoint: 'assignments',
     columns: [['route_id', 'Trajet'], ['bus_id', 'Bus'], ['children', 'Enfants et arrêts'], ['driver_id', 'Chauffeur'], ['assistant_id', 'Assistante'], ['starts_on', 'Début'], ['ends_on', 'Fin']],
-    fields: [['route_id', 'Trajet', 'route'], ['route_children', 'Enfants affectés à ce trajet', 'routeChildren'], ['bus_id', 'Bus', 'bus'], ['driver_id', 'Chauffeur', 'driver'], ['assistant_id', 'Assistante', 'assistant'], ['starts_on', 'Date de début', 'date'], ['ends_on', 'Date de fin', 'date']]
+    fields: [['route_id', 'Trajet', 'route'], ['bus_id', 'Bus', 'bus'], ['route_children', 'Enfants affectés à ce bus et ce trajet', 'routeChildren'], ['driver_id', 'Chauffeur', 'driver'], ['assistant_id', 'Assistante', 'assistant'], ['starts_on', 'Date de début', 'date'], ['ends_on', 'Date de fin', 'date']]
   }
 };
 
@@ -197,9 +197,10 @@ function Dashboard({ data }) {
   </>;
 }
 
-function childrenForRoute(lists, routeId) {
-  if (!routeId) return [];
-  return lists.routeStudents.filter(link => Number(link.route_id) === Number(routeId)).map(link => ({
+function childrenForAssignment(lists, routeId, busId) {
+  if (!routeId || !busId) return [];
+  return lists.routeStudents.filter(link => Number(link.route_id) === Number(routeId)
+    && Number(link.bus_id) === Number(busId)).map(link => ({
     student: lists.students.find(student => Number(student.id) === Number(link.student_id)),
     stop: lists.stops.find(stop => Number(stop.id) === Number(link.stop_id))
   })).filter(item => item.student);
@@ -214,19 +215,28 @@ function Field({ definition, form, setForm, lists }) {
     : type === 'driver' ? lists.users.filter(x => x.role === 'DRIVER').map(x => [x.id, `${x.first_name} ${x.last_name}`])
     : type === 'assistant' ? lists.users.filter(x => x.role === 'ASSISTANT').map(x => [x.id, `${x.first_name} ${x.last_name}`])
     : type === 'student' ? lists.students.map(x => [x.id, `${x.first_name} ${x.last_name}`])
+    : type === 'routeBus' ? lists.assignments.filter(x => x.active && Number(x.route_id) === Number(form.route_id)).map(x => {
+      const bus = lists.buses.find(item => Number(item.id) === Number(x.bus_id));
+      return [x.bus_id, bus ? `${bus.registration} — ${bus.label}` : `Bus ${x.bus_id}`];
+    })
     : type === 'stop' ? lists.stops.filter(x => !form.route_id || Number(x.route_id) === Number(form.route_id)).map(x => [x.id, `${x.stop_order}. ${x.name}`])
     : null;
   if (type === 'routeChildren') {
-    const assignedChildren = childrenForRoute(lists, form.route_id);
+    const assignedChildren = childrenForAssignment(lists, form.route_id, form.bus_id);
     return <label>{label}<div className="related-list">
-      {!form.route_id && <span>Sélectionnez d’abord un trajet.</span>}
-      {form.route_id && !assignedChildren.length && <span>Aucun enfant affecté à ce trajet.</span>}
+      {(!form.route_id || !form.bus_id) && <span>Sélectionnez d’abord un trajet et un bus.</span>}
+      {form.route_id && form.bus_id && !assignedChildren.length && <span>Aucun enfant affecté à ce bus sur ce trajet.</span>}
       {assignedChildren.map(({ student, stop }) => <span key={student.id}>• {student.first_name} {student.last_name}{stop ? ` — ${stop.name}` : ''}</span>)}
     </div></label>;
   }
+  const updateValue = nextValue => setForm({
+    ...form,
+    ...(name === 'route_id' ? { bus_id: '', stop_id: '' } : {}),
+    [name]: nextValue
+  });
   return <label>{label}
-    {type === 'select' ? <select value={value} onChange={e => setForm({ ...form, [name]: e.target.value })}><option value="">Sélectionner</option>{values.map(option => <option key={option} value={option}>{option}</option>)}</select>
-      : selectOptions ? <select value={value} onChange={e => setForm({ ...form, [name]: e.target.value })}><option value="">Sélectionner</option>{selectOptions.map(([id, text]) => <option key={id} value={id}>{text}</option>)}</select>
+    {type === 'select' ? <select value={value} onChange={e => updateValue(e.target.value)}><option value="">Sélectionner</option>{values.map(option => <option key={option} value={option}>{option}</option>)}</select>
+      : selectOptions ? <select value={value} onChange={e => updateValue(e.target.value)}><option value="">Sélectionner</option>{selectOptions.map(([id, text]) => <option key={id} value={id}>{text}</option>)}</select>
       : <input type={type} value={value} onChange={e => setForm({ ...form, [name]: e.target.value })} required={['first_name', 'last_name', 'email', 'registration', 'label', 'code', 'name', 'origin', 'destination', 'home_address', 'home_lat', 'home_lng', 'route_id', 'bus_id', 'driver_id'].includes(name)} />}
   </label>;
 }
@@ -255,7 +265,7 @@ function EntityPanel({ entity, token, lists, refresh, onUnauthorized }) {
   const display = (row, key) => {
     if (key === 'active') return row[key] ? 'Oui' : 'Non';
     if (key === 'children') {
-      const assignedChildren = childrenForRoute(lists, row.route_id);
+      const assignedChildren = childrenForAssignment(lists, row.route_id, row.bus_id);
       return assignedChildren.length
         ? assignedChildren.map(({ student, stop }) => `${student.first_name} ${student.last_name}${stop ? ` (${stop.name})` : ''}`).join(', ')
         : 'Aucun enfant affecté';

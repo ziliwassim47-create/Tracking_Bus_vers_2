@@ -99,6 +99,7 @@ Les nouveaux comptes validés par l'administration reçoivent aussi
 - demandes d'inscription et validation par l'administration;
 - utilisateurs, rôles et profils;
 - enfants et relation avec leurs parents;
+- affectation de chaque enfant à un trajet, un bus et un arrêt, avec contrôle de capacité;
 - bus, lignes, arrêts et inscriptions aux lignes;
 - affectations chauffeur, assistante, bus et itinéraire;
 - démarrage et fin d'un trajet;

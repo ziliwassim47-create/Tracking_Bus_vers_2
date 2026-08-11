@@ -203,8 +203,10 @@ function notifyRouteParents(routeId, tripId, type, title, message) {
   const parents = all(`
     SELECT DISTINCT e.idParent AS parent_id FROM TrajetEnfant te
     JOIN Enfant e ON e.id = te.idEnfant
-    WHERE te.idTrajet = ? AND te.actif = 1 AND e.actif = 1
-  `, routeId);
+    JOIN ExecutionTrajet t ON t.id = ?
+    WHERE te.idTrajet = ? AND (te.idBus = t.idBus OR te.idBus IS NULL)
+      AND te.actif = 1 AND e.actif = 1
+  `, tripId, routeId);
   const statement = db.prepare(`
     INSERT INTO Notification(idUtilisateur, idExecutionTrajet, type, titre, message)
     VALUES (?, ?, ?, ?, ?)
@@ -251,9 +253,10 @@ function buildBootstrap(user) {
   let tripWhere = '';
   let tripParams = [];
   if (user.role === 'PARENT') {
-    tripWhere = `WHERE t.idTrajet IN (
-      SELECT DISTINCT te.idTrajet FROM TrajetEnfant te
-      JOIN Enfant e ON e.id = te.idEnfant WHERE e.idParent = ?
+    tripWhere = `WHERE EXISTS (
+      SELECT 1 FROM TrajetEnfant te JOIN Enfant e ON e.id = te.idEnfant
+      WHERE e.idParent = ? AND te.idTrajet = t.idTrajet
+        AND (te.idBus = t.idBus OR te.idBus IS NULL) AND te.actif = 1
     )`;
     tripParams = [user.id];
   } else if (user.role === 'DRIVER') {
@@ -351,7 +354,7 @@ function buildBootstrap(user) {
       actif AS active, creeLe AS created_at, modifieLe AS updated_at FROM Trajet ORDER BY code`),
     stops: all(`SELECT id, idTrajet AS route_id, nom AS name, adresse AS address, latitude, longitude,
       ordreArret AS stop_order, estimationTemps AS planned_offset_min FROM Arret ORDER BY idTrajet, ordreArret`),
-    routeStudents: all(`SELECT idTrajet AS route_id, idEnfant AS student_id, idArret AS stop_id,
+    routeStudents: all(`SELECT idTrajet AS route_id, idEnfant AS student_id, idBus AS bus_id, idArret AS stop_id,
       actif AS active, affecteLe AS assigned_at FROM TrajetEnfant WHERE actif = 1`),
     assignments,
     trips,
@@ -452,10 +455,13 @@ function validateEntityRelations(entity, data) {
     const assistant = data.assistant_id
       ? db.prepare("SELECT id FROM Utilisateur WHERE id = ? AND typeCompte = 'ASSISTANT' AND actif = 1").get(data.assistant_id)
       : true;
+    const existing = db.prepare('SELECT id FROM Affectation WHERE idTrajet = ? AND idBus = ? AND actif = 1')
+      .get(data.route_id, data.bus_id);
     if (!route) return 'Le trajet sélectionné est introuvable ou inactif';
     if (!bus) return 'Le bus sélectionné est introuvable ou inactif';
     if (!driver) return 'Le chauffeur sélectionné est introuvable ou possède un rôle invalide';
     if (!assistant) return "L’assistante sélectionnée est introuvable ou possède un rôle invalide";
+    if (existing) return 'Ce bus est déjà affecté activement à ce trajet';
   }
   return null;
 }
@@ -525,7 +531,7 @@ async function handleApi(req, res, url) {
       SELECT e.id AS ID, e.prenom || ' ' || e.nom AS NOM,
              e.latitudeDomicile, e.longitudeDomicile, e.adresseDomicile,
              u.telephone AS TLF, e.classe AS CLASSE,
-             COALESCE(te.idTrajet, 1) AS ID_BUS,
+             COALESCE(te.idBus, 1) AS ID_BUS,
              CASE WHEN pe.statut = 'BOARDED' THEN 1 ELSE 0 END AS presence
       FROM Enfant e
       JOIN Utilisateur u ON u.id = e.idParent
@@ -536,7 +542,7 @@ async function handleApi(req, res, url) {
     `;
     const params = [];
     if (!isNaN(busFilter) && busFilter > 0) {
-      sql += ' WHERE te.idTrajet = ?';
+      sql += ' WHERE te.idBus = ?';
       params.push(busFilter);
     }
     sql += ' ORDER BY e.classe, e.nom';
@@ -557,7 +563,7 @@ async function handleApi(req, res, url) {
   if (req.method === 'GET' && userNouvMatch) {
     const enfantId = userNouvMatch[1];
     const e = db.prepare(`
-      SELECT e.id, e.latitudeDomicile, e.longitudeDomicile, COALESCE(te.idTrajet, 1) AS busId
+      SELECT e.id, e.latitudeDomicile, e.longitudeDomicile, COALESCE(te.idBus, 1) AS busId
       FROM Enfant e
       LEFT JOIN TrajetEnfant te ON te.idEnfant = e.id AND te.actif = 1
       WHERE e.id = ?
@@ -762,8 +768,9 @@ async function handleApi(req, res, url) {
     const student = db.prepare(`
       SELECT e.id, e.idParent AS parent_id, e.prenom AS first_name, e.nom AS last_name
       FROM Enfant e JOIN TrajetEnfant te ON te.idEnfant = e.id
-      WHERE e.id = ? AND e.actif = 1 AND te.idTrajet = ? AND te.actif = 1
-    `).get(body.student_id, trip.route_id);
+      WHERE e.id = ? AND e.actif = 1 AND te.idTrajet = ?
+        AND (te.idBus = ? OR te.idBus IS NULL) AND te.actif = 1
+    `).get(body.student_id, trip.route_id, trip.bus_id);
     if (!student) return json(res, 404, { error: 'Élève non affecté à ce trajet' });
     const result = db.prepare(`
       INSERT INTO PresenceEnfant(idExecutionTrajet, idEnfant, statut, enregistrePar, heureMontee, heureDescente)
@@ -822,28 +829,38 @@ async function handleApi(req, res, url) {
     const body = await readBody(req);
     const routeId = Number(body.route_id);
     const studentId = Number(body.student_id);
+    const busId = Number(body.bus_id);
     const stopId = body.stop_id === undefined || body.stop_id === null || body.stop_id === '' ? null : Number(body.stop_id);
-    if (!routeId || !studentId) return json(res, 422, { error: 'route_id et student_id requis' });
+    if (!routeId || !studentId || !busId) return json(res, 422, { error: 'route_id, bus_id et student_id requis' });
     const route = db.prepare('SELECT id FROM Trajet WHERE id = ?').get(routeId);
     const student = db.prepare('SELECT id FROM Enfant WHERE id = ? AND actif = 1').get(studentId);
     if (!route || !student) return json(res, 404, { error: 'Route ou élève introuvable' });
+    const assignment = db.prepare(`SELECT a.id, b.capacite AS capacity FROM Affectation a
+      JOIN Bus b ON b.id = a.idBus
+      WHERE a.idTrajet = ? AND a.idBus = ? AND a.actif = 1`).get(routeId, busId);
+    if (!assignment) return json(res, 422, { error: 'Ce bus n’est pas affecté activement à ce trajet' });
     const requestedStop = stopId ? db.prepare('SELECT id FROM Arret WHERE id = ? AND idTrajet = ?').get(stopId, routeId) : null;
     if (stopId && !requestedStop) return json(res, 422, { error: 'L’arrêt sélectionné n’appartient pas à ce trajet' });
     const fallbackStop = db.prepare('SELECT id FROM Arret WHERE idTrajet = ? ORDER BY ordreArret, id LIMIT 1').get(routeId);
     const resolvedStopId = requestedStop?.id || fallbackStop?.id || null;
     if (!resolvedStopId) return json(res, 422, { error: 'Aucun arrêt disponible pour cette ligne' });
     const existing = db.prepare('SELECT idTrajet, idEnfant FROM TrajetEnfant WHERE idTrajet = ? AND idEnfant = ?').get(routeId, studentId);
+    const occupiedSeats = db.prepare(`SELECT COUNT(*) AS count FROM TrajetEnfant
+      WHERE idTrajet = ? AND idBus = ? AND actif = 1 AND idEnfant != ?`).get(routeId, busId, studentId).count;
+    if (occupiedSeats >= assignment.capacity) {
+      return json(res, 409, { error: `Ce bus est complet (${assignment.capacity} places)` });
+    }
     if (existing) {
-      const updateResult = db.prepare('UPDATE TrajetEnfant SET idArret = ?, actif = 1, affecteLe = CURRENT_TIMESTAMP WHERE idTrajet = ? AND idEnfant = ?').run(resolvedStopId, routeId, studentId);
+      const updateResult = db.prepare('UPDATE TrajetEnfant SET idBus = ?, idArret = ?, actif = 1, affecteLe = CURRENT_TIMESTAMP WHERE idTrajet = ? AND idEnfant = ?').run(busId, resolvedStopId, routeId, studentId);
       return json(res, 200, { ok: true, id: `${routeId}:${studentId}`, updated: updateResult.changes > 0 });
     }
-    const result = db.prepare('INSERT INTO TrajetEnfant(idTrajet, idEnfant, idArret, actif, affecteLe) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)').run(routeId, studentId, resolvedStopId);
+    const result = db.prepare('INSERT INTO TrajetEnfant(idTrajet, idEnfant, idBus, idArret, actif, affecteLe) VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)').run(routeId, studentId, busId, resolvedStopId);
     return json(res, 201, { id: Number(result.lastInsertRowid) });
   }
 
   if (req.method === 'GET' && pathname === '/api/route-students') {
     if (!requireRole(res, user, ['ADMIN'])) return;
-    return json(res, 200, all(`SELECT te.idTrajet AS route_id, te.idEnfant AS student_id,
+    return json(res, 200, all(`SELECT te.idTrajet AS route_id, te.idEnfant AS student_id, te.idBus AS bus_id,
       te.idArret AS stop_id, te.actif AS active, te.affecteLe AS assigned_at
       FROM TrajetEnfant te WHERE te.actif = 1 ORDER BY te.idTrajet, te.idEnfant`));
   }

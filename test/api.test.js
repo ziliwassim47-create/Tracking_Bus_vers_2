@@ -247,12 +247,21 @@ test('API métier et persistance SQLite', async t => {
     body: JSON.stringify({
       registration: 'TEST 001',
       label: 'Bus test',
-      capacity: 24,
+      capacity: 1,
       status: 'AVAILABLE',
       gps_device_uid: 'GPS-TEST-001'
     })
   }, admin.token);
   assert.equal(busResult.response.status, 201);
+
+  const secondBusResult = await request('/buses', {
+    method: 'POST',
+    body: JSON.stringify({
+      registration: 'TEST 002', label: 'Bus test renfort', capacity: 24,
+      status: 'AVAILABLE', gps_device_uid: 'GPS-TEST-002'
+    })
+  }, admin.token);
+  assert.equal(secondBusResult.response.status, 201);
 
   const routeWithStops = await request('/routes', {
     method: 'POST',
@@ -279,6 +288,27 @@ test('API métier et persistance SQLite', async t => {
   assert.ok(createdStops.some(item => item.name === 'Arrêt A'));
   assert.ok(createdStops.some(item => item.name === 'Arrêt B'));
 
+  const availableDriver = adminBootstrap.payload.users.find(item => item.role === 'DRIVER');
+  const busRouteAssignment = await request('/assignments', {
+    method: 'POST',
+    body: JSON.stringify({
+      route_id: routeWithStops.payload.id, bus_id: busResult.payload.id,
+      driver_id: availableDriver.id, assistant_id: createdAssistant.payload.id,
+      starts_on: '2026-09-01'
+    })
+  }, admin.token);
+  assert.equal(busRouteAssignment.response.status, 201);
+
+  const secondBusRouteAssignment = await request('/assignments', {
+    method: 'POST',
+    body: JSON.stringify({
+      route_id: routeWithStops.payload.id, bus_id: secondBusResult.payload.id,
+      driver_id: availableDriver.id, assistant_id: createdAssistant.payload.id,
+      starts_on: '2026-09-01'
+    })
+  }, admin.token);
+  assert.equal(secondBusRouteAssignment.response.status, 201);
+
   const createdChild = await request('/students', {
     method: 'POST',
     body: JSON.stringify({
@@ -294,6 +324,7 @@ test('API métier et persistance SQLite', async t => {
     method: 'POST',
     body: JSON.stringify({
       route_id: routeWithStops.payload.id,
+      bus_id: busResult.payload.id,
       student_id: createdChild.payload.id,
       stop_id: foreignStop.id
     })
@@ -304,16 +335,41 @@ test('API métier et persistance SQLite', async t => {
     method: 'POST',
     body: JSON.stringify({
       route_id: routeWithStops.payload.id,
+      bus_id: busResult.payload.id,
       student_id: createdChild.payload.id,
       stop_id: createdStops[0].id
     })
   }, admin.token);
   assert.equal(childRouteAssignment.response.status, 201);
 
+  const fullBusAssignment = await request('/route-students', {
+    method: 'POST',
+    body: JSON.stringify({
+      route_id: routeWithStops.payload.id,
+      bus_id: busResult.payload.id,
+      student_id: studentWithoutRoute.payload.id,
+      stop_id: createdStops[1].id
+    })
+  }, admin.token);
+  assert.equal(fullBusAssignment.response.status, 409);
+
+  const reinforcementBusAssignment = await request('/route-students', {
+    method: 'POST',
+    body: JSON.stringify({
+      route_id: routeWithStops.payload.id,
+      bus_id: secondBusResult.payload.id,
+      student_id: studentWithoutRoute.payload.id,
+      stop_id: createdStops[1].id
+    })
+  }, admin.token);
+  assert.equal(reinforcementBusAssignment.response.status, 201);
+
   const routeStudentsList = await request('/route-students', {}, admin.token);
   assert.equal(routeStudentsList.response.status, 200);
   assert.ok(routeStudentsList.payload.some(item => item.route_id === routeWithStops.payload.id
-    && item.student_id === createdChild.payload.id && item.stop_id === createdStops[0].id));
+    && item.bus_id === busResult.payload.id && item.student_id === createdChild.payload.id && item.stop_id === createdStops[0].id));
+  assert.ok(routeStudentsList.payload.some(item => item.route_id === routeWithStops.payload.id
+    && item.bus_id === secondBusResult.payload.id && item.student_id === studentWithoutRoute.payload.id));
 
   const wrongDriverAssignment = await request('/assignments', {
     method: 'POST',
@@ -325,21 +381,12 @@ test('API métier et persistance SQLite', async t => {
   }, admin.token);
   assert.equal(wrongDriverAssignment.response.status, 422);
 
-  const availableDriver = adminBootstrap.payload.users.find(item => item.role === 'DRIVER');
-  const busRouteAssignment = await request('/assignments', {
-    method: 'POST',
-    body: JSON.stringify({
-      route_id: routeWithStops.payload.id, bus_id: busResult.payload.id,
-      driver_id: availableDriver.id, assistant_id: createdAssistant.payload.id,
-      starts_on: '2026-09-01'
-    })
-  }, admin.token);
-  assert.equal(busRouteAssignment.response.status, 201);
-
   const assignmentsList = await request('/assignments', {}, admin.token);
   assert.equal(assignmentsList.response.status, 200);
   assert.ok(assignmentsList.payload.some(item => item.id === busRouteAssignment.payload.id
     && item.route_id === routeWithStops.payload.id && item.bus_id === busResult.payload.id));
+  assert.ok(assignmentsList.payload.some(item => item.id === secondBusRouteAssignment.payload.id
+    && item.route_id === routeWithStops.payload.id && item.bus_id === secondBusResult.payload.id));
 
   const newParentBootstrap = await request('/bootstrap', {}, parentPhoneLogin.payload.token);
   assert.equal(newParentBootstrap.response.status, 200);
@@ -370,6 +417,7 @@ test('API métier et persistance SQLite', async t => {
     method: 'POST',
     body: JSON.stringify({
       route_id: routeWithStops.payload.id,
+      bus_id: secondBusResult.payload.id,
       student_id: parentBootstrap.payload.students[0].id,
       stop_id: createdStops[0].id
     })
@@ -456,6 +504,7 @@ test('API métier et persistance SQLite', async t => {
     assert.equal(tables.includes('users'), false);
     assert.equal(tables.includes('students'), false);
     assert.ok(schemaDb.prepare('PRAGMA table_info(Arret)').all().some(column => column.name === 'nom'));
+    assert.ok(schemaDb.prepare('PRAGMA table_info(TrajetEnfant)').all().some(column => column.name === 'idBus'));
   } finally {
     schemaDb.close();
   }
