@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { API_BASE_URL } from '../config';
+import { AuthSession, authenticatedRequest, getSession, saveSession } from '../utils/session';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -183,6 +183,17 @@ interface ParentContextValue {
   selectChild: (child: Child) => void;
   markNotificationRead: (id: number) => void;
   refreshBusPosition: () => Promise<void>;
+  activateParentSession: (session: AuthSession) => Promise<void>;
+}
+
+interface ParentBootstrap {
+  user: ParentUser;
+  students: Array<Omit<Child, 'status'>>;
+  trips: Trip[];
+  currentTrip: Trip | null;
+  studentEvents: Array<{ student_id: number; event_type: Child['status'] }>;
+  latestPosition: BusPosition | null;
+  notifications: Notification[];
 }
 
 const ParentContext = createContext<ParentContextValue | null>(null);
@@ -191,14 +202,14 @@ const ParentContext = createContext<ParentContextValue | null>(null);
 
 export function ParentProvider(props: Readonly<{ children: React.ReactNode }>) {
   const { children: reactChildren } = props;
-  const [user] = useState<ParentUser>(MOCK_USER);
-  const [childrenList] = useState<Child[]>(MOCK_CHILDREN);
+  const [user, setUser] = useState<ParentUser>(MOCK_USER);
+  const [childrenList, setChildrenList] = useState<Child[]>(MOCK_CHILDREN);
   const [selectedChild, setSelectedChild] = useState<Child | null>(MOCK_CHILDREN[0]);
-  const [currentTrip] = useState<Trip | null>(MOCK_TRIP);
-  const [completedTrips] = useState<Trip[]>(MOCK_COMPLETED_TRIPS);
+  const [currentTrip, setCurrentTrip] = useState<Trip | null>(MOCK_TRIP);
+  const [completedTrips, setCompletedTrips] = useState<Trip[]>(MOCK_COMPLETED_TRIPS);
   const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
-  const [useMockData] = useState(true);
-  const [busPosition, setBusPosition] = useState<BusPosition>({
+  const [useMockData, setUseMockData] = useState(true);
+  const [busPosition, setBusPosition] = useState<BusPosition | null>({
     latitude: 36.8126,
     longitude: 10.1762,
     speed_kmh: 28,
@@ -220,13 +231,49 @@ export function ParentProvider(props: Readonly<{ children: React.ReactNode }>) {
     };
   }
 
-  // Simulate bus movement for demo
+  const applyBootstrap = useCallback((payload: ParentBootstrap) => {
+    const eventByStudent = new Map(payload.studentEvents.map(event => [event.student_id, event.event_type]));
+    const realChildren = payload.students.map(child => ({
+      ...child,
+      status: eventByStudent.get(child.id) || 'WAITING',
+    }));
+    setUser(payload.user);
+    setChildrenList(realChildren);
+    setSelectedChild(previous => realChildren.find(child => child.id === previous?.id) || realChildren[0] || null);
+    setCurrentTrip(payload.currentTrip);
+    setCompletedTrips(payload.trips.filter(trip => trip.status === 'COMPLETED'));
+    setNotifications(payload.notifications);
+    setBusPosition(payload.latestPosition);
+    setUseMockData(false);
+  }, []);
+
+  const activateParentSession = useCallback(async (session: AuthSession) => {
+    await saveSession(session);
+    const payload = await authenticatedRequest<ParentBootstrap>('/bootstrap');
+    if (payload.user.role !== 'PARENT') throw new Error('Ce compte ne possède pas un espace Parent.');
+    applyBootstrap(payload);
+  }, [applyBootstrap]);
+
   useEffect(() => {
+    void (async () => {
+      const session = await getSession();
+      if (session?.user.role !== 'PARENT') return;
+      try {
+        applyBootstrap(await authenticatedRequest<ParentBootstrap>('/bootstrap'));
+      } catch {
+        // L'écran de connexion permettra de renouveler une session expirée.
+      }
+    })();
+  }, [applyBootstrap]);
+
+  // Conserve l'animation de démonstration uniquement avant une vraie connexion.
+  useEffect(() => {
+    if (!useMockData) return undefined;
     const interval = setInterval(() => {
-      setBusPosition((prev) => getMockPositionUpdate(prev, 0.0008));
+      setBusPosition((prev) => prev ? getMockPositionUpdate(prev, 0.0008) : prev);
     }, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [useMockData]);
 
   const selectChild = useCallback((child: Child) => {
     setSelectedChild(child);
@@ -238,17 +285,17 @@ export function ParentProvider(props: Readonly<{ children: React.ReactNode }>) {
         n.id === id ? { ...n, read_at: new Date().toISOString() } : n
       )
     );
-  }, []);
+    if (!useMockData) void authenticatedRequest(`/notifications/${id}/read`, { method: 'PATCH' });
+  }, [useMockData]);
 
   const refreshBusPosition = useCallback(async () => {
     if (useMockData) {
-      setBusPosition((prev) => getMockPositionUpdate(prev, 0.001));
+      setBusPosition((prev) => prev ? getMockPositionUpdate(prev, 0.001) : prev);
       return;
     }
     try {
-      const res = await fetch(`${API_BASE_URL}/parent/bus-position`);
-      const pos = await res.json();
-      setBusPosition(pos);
+      const payload = await authenticatedRequest<ParentBootstrap>('/bootstrap');
+      setBusPosition(payload.latestPosition);
     } catch {
       // Keep previous position on error
     }
@@ -268,6 +315,7 @@ export function ParentProvider(props: Readonly<{ children: React.ReactNode }>) {
       selectChild,
       markNotificationRead,
       refreshBusPosition,
+      activateParentSession,
     }),
     [
       user,
@@ -282,6 +330,7 @@ export function ParentProvider(props: Readonly<{ children: React.ReactNode }>) {
       selectChild,
       markNotificationRead,
       refreshBusPosition,
+      activateParentSession,
     ]
   );
 

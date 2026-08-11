@@ -46,6 +46,14 @@ async function login(email) {
   return payload;
 }
 
+async function loginByPhone(phone, password = 'demo1234') {
+  const { response, payload } = await request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ phone, password })
+  });
+  return { response, payload };
+}
+
 test('API métier et persistance SQLite', async t => {
   fs.rmSync(testDb, { force: true });
   const server = spawn(process.execPath, ['server.js'], {
@@ -137,6 +145,64 @@ test('API métier et persistance SQLite', async t => {
   assert.equal(adminBootstrap.response.status, 200);
   assert.equal(adminBootstrap.payload.user.role, 'ADMIN');
   assert.ok(adminBootstrap.payload.users.length >= 7);
+
+  const createdParent = await request('/users', {
+    method: 'POST',
+    body: JSON.stringify({
+      role: 'PARENT', first_name: 'Parent', last_name: 'Téléphone',
+      email: 'parent.phone@test.tn', phone: '+216 55 123 456', password: 'parentSecret!'
+    })
+  }, admin.token);
+  assert.equal(createdParent.response.status, 201);
+
+  const createdAssistant = await request('/users', {
+    method: 'POST',
+    body: JSON.stringify({
+      role: 'ASSISTANT', first_name: 'Assistante', last_name: 'Test',
+      email: 'assistante.creation@test.tn', phone: '+216 55 123 457', password: 'demo1234'
+    })
+  }, admin.token);
+  assert.equal(createdAssistant.response.status, 201);
+
+  const createdAdmin = await request('/users', {
+    method: 'POST',
+    body: JSON.stringify({
+      role: 'ADMIN', first_name: 'Admin', last_name: 'Test',
+      email: 'admin.creation@test.tn', phone: '+216 55 123 458', password: 'demo1234'
+    })
+  }, admin.token);
+  assert.equal(createdAdmin.response.status, 201);
+
+  const parentPhoneLogin = await loginByPhone('55 123 456', 'parentSecret!');
+  assert.equal(parentPhoneLogin.response.status, 200);
+  assert.equal(parentPhoneLogin.payload.user.role, 'PARENT');
+  assert.equal(parentPhoneLogin.payload.user.id, createdParent.payload.id);
+  const wrongParentPassword = await loginByPhone('+21655123456', 'incorrect');
+  assert.equal(wrongParentPassword.response.status, 401);
+  const assistantPhoneLogin = await loginByPhone('55123457');
+  assert.equal(assistantPhoneLogin.response.status, 200);
+  assert.equal(assistantPhoneLogin.payload.user.role, 'ASSISTANT');
+  const createdAdminLogin = await login('admin.creation@test.tn');
+  assert.equal(createdAdminLogin.user.role, 'ADMIN');
+
+  const duplicatePhone = await request('/users', {
+    method: 'POST',
+    body: JSON.stringify({
+      role: 'PARENT', first_name: 'Doublon', last_name: 'Téléphone',
+      email: 'duplicate.phone@test.tn', phone: '55123456', password: 'demo1234'
+    })
+  }, admin.token);
+  assert.equal(duplicatePhone.response.status, 409);
+
+  const invalidRole = await request('/users', {
+    method: 'POST',
+    body: JSON.stringify({
+      role: 'UNKNOWN', first_name: 'Rôle', last_name: 'Invalide',
+      email: 'invalid.role@test.tn', phone: '+216 55 000 099', password: 'demo1234'
+    })
+  }, admin.token);
+  assert.equal(invalidRole.response.status, 422);
+
   const unassignedParent = adminBootstrap.payload.users.find(user => user.email === 'leila@demo.tn');
   const studentWithoutRoute = await request('/students', {
     method: 'POST',
@@ -207,6 +273,73 @@ test('API métier et persistance SQLite', async t => {
   assert.equal(createdStops.length, 2);
   assert.ok(createdStops.some(item => item.name === 'Arrêt A'));
   assert.ok(createdStops.some(item => item.name === 'Arrêt B'));
+
+  const createdChild = await request('/students', {
+    method: 'POST',
+    body: JSON.stringify({
+      parent_id: createdParent.payload.id,
+      first_name: 'Enfant', last_name: 'Téléphone', school_class: '4ème A',
+      home_address: '12 rue du test', home_lat: 36.82, home_lng: 10.18
+    })
+  }, admin.token);
+  assert.equal(createdChild.response.status, 201);
+
+  const foreignStop = adminBootstrap.payload.stops.find(stop => stop.route_id !== routeWithStops.payload.id);
+  const mismatchedStopAssignment = await request('/route-students', {
+    method: 'POST',
+    body: JSON.stringify({
+      route_id: routeWithStops.payload.id,
+      student_id: createdChild.payload.id,
+      stop_id: foreignStop.id
+    })
+  }, admin.token);
+  assert.equal(mismatchedStopAssignment.response.status, 422);
+
+  const childRouteAssignment = await request('/route-students', {
+    method: 'POST',
+    body: JSON.stringify({
+      route_id: routeWithStops.payload.id,
+      student_id: createdChild.payload.id,
+      stop_id: createdStops[0].id
+    })
+  }, admin.token);
+  assert.equal(childRouteAssignment.response.status, 201);
+
+  const routeStudentsList = await request('/route-students', {}, admin.token);
+  assert.equal(routeStudentsList.response.status, 200);
+  assert.ok(routeStudentsList.payload.some(item => item.route_id === routeWithStops.payload.id
+    && item.student_id === createdChild.payload.id && item.stop_id === createdStops[0].id));
+
+  const wrongDriverAssignment = await request('/assignments', {
+    method: 'POST',
+    body: JSON.stringify({
+      route_id: routeWithStops.payload.id, bus_id: busResult.payload.id,
+      driver_id: createdParent.payload.id, assistant_id: createdAssistant.payload.id,
+      starts_on: '2026-09-01'
+    })
+  }, admin.token);
+  assert.equal(wrongDriverAssignment.response.status, 422);
+
+  const availableDriver = adminBootstrap.payload.users.find(item => item.role === 'DRIVER');
+  const busRouteAssignment = await request('/assignments', {
+    method: 'POST',
+    body: JSON.stringify({
+      route_id: routeWithStops.payload.id, bus_id: busResult.payload.id,
+      driver_id: availableDriver.id, assistant_id: createdAssistant.payload.id,
+      starts_on: '2026-09-01'
+    })
+  }, admin.token);
+  assert.equal(busRouteAssignment.response.status, 201);
+
+  const assignmentsList = await request('/assignments', {}, admin.token);
+  assert.equal(assignmentsList.response.status, 200);
+  assert.ok(assignmentsList.payload.some(item => item.id === busRouteAssignment.payload.id
+    && item.route_id === routeWithStops.payload.id && item.bus_id === busResult.payload.id));
+
+  const newParentBootstrap = await request('/bootstrap', {}, parentPhoneLogin.payload.token);
+  assert.equal(newParentBootstrap.response.status, 200);
+  assert.equal(newParentBootstrap.payload.students.length, 1);
+  assert.equal(newParentBootstrap.payload.students[0].id, createdChild.payload.id);
 
   const createdUser = await request('/users', {
     method: 'POST',

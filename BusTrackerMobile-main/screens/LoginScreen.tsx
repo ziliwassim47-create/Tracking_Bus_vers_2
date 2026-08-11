@@ -15,6 +15,9 @@ import {
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { platformShadow, platformTextShadow } from '../styles/platformStyles';
+import { API_BASE_URL } from '../config';
+import { useParent } from '../context/ParentContext';
+import { AuthSession, saveSession } from '../utils/session';
 
 type RootStackParamList = {
   Login: undefined;
@@ -22,14 +25,16 @@ type RootStackParamList = {
   Tracking: { selectedBus: string };
   TrackingScreenBus: any;
   Students: { selectedBus: string };
+  ParentHome: undefined;
 };
 
 type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen(props: Readonly<LoginScreenProps>) {
   const { navigation } = props;
-  const [phone, setPhone] = useState('24444777');
-  const [password, setPassword] = useState('password123');
+  const { activateParentSession } = useParent();
+  const [phone, setPhone] = useState('20200200');
+  const [password, setPassword] = useState('demo1234');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -54,17 +59,38 @@ export default function LoginScreen(props: Readonly<LoginScreenProps>) {
     ]).start();
   }, []);
 
-  function handleLogin() {
+  async function handleLogin() {
     if (!phone || !password) {
       Alert.alert('Erreur', 'Veuillez remplir tous les champs');
       return;
     }
 
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone.trim(), password }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Connexion impossible');
+      const session = result as AuthSession;
+      if (session.user.role === 'ADMIN') {
+        throw new Error("Le compte Administration doit utiliser le portail web d’administration.");
+      }
+      if (session.user.role === 'PARENT') {
+        await activateParentSession(session);
+        navigation.reset({ index: 0, routes: [{ name: 'ParentHome' }] });
+      } else {
+        await saveSession(session);
+        navigation.reset({ index: 0, routes: [{ name: 'List' }] });
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Connexion impossible';
+      Alert.alert('Erreur de connexion', message);
+    } finally {
       setLoading(false);
-      navigation.replace('List');
-    }, 1500);
+    }
   }
 
   const loginButtonLabel = loading ? 'Connexion...' : '🔐 Se connecter';

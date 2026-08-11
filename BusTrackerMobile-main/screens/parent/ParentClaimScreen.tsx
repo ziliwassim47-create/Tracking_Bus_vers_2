@@ -12,7 +12,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useParent } from '../../context/ParentContext';
 import ParentBottomNav from '../../components/ParentBottomNav';
-import { API_BASE_URL } from '../../config';
+import { authenticatedRequest } from '../../utils/session';
 import { platformShadow } from '../../styles/platformStyles';
 
 type RootStackParamList = {
@@ -58,7 +58,7 @@ export default function ParentClaimScreen(props: Readonly<Props>) {
         // Simulate network delay
         await new Promise((r) => setTimeout(r, 1200));
       } else {
-        await fetch(`${API_BASE_URL}/incidents`, {
+        await authenticatedRequest('/incidents', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

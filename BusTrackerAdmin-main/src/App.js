@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:9000/api').replace(/\/$/, '');
 const TOKEN_KEY = 'busTrackerAdminToken';
 const SESSION_EVENT = 'bus-tracker-admin-session';
-const EMPTY_DATA = { users: [], students: [], buses: [], routes: [], assignments: [] };
+const EMPTY_DATA = { users: [], students: [], buses: [], routes: [], stops: [], routeStudents: [], assignments: [] };
 let refreshPromise = null;
 
 const ENTITIES = {
@@ -13,6 +13,15 @@ const ENTITIES = {
     fields: [
       ['code', 'Code', 'text'], ['name', 'Nom du trajet', 'text'], ['origin', 'Point de départ', 'text'],
       ['destination', 'Destination', 'text'], ['morning_time', 'Heure matin', 'time'], ['afternoon_time', 'Heure après-midi', 'time']
+    ]
+  },
+  stops: {
+    title: 'Arrêts', singular: 'arrêt', endpoint: 'stops',
+    columns: [['route_id', 'Trajet'], ['stop_order', 'Ordre'], ['name', 'Nom'], ['address', 'Adresse'], ['planned_offset_min', 'Minutes']],
+    fields: [
+      ['route_id', 'Trajet', 'route'], ['stop_order', 'Ordre', 'number'], ['name', 'Nom de l’arrêt', 'text'],
+      ['address', 'Adresse', 'text'], ['latitude', 'Latitude', 'number'], ['longitude', 'Longitude', 'number'],
+      ['planned_offset_min', 'Temps depuis le départ (min)', 'number']
     ]
   },
   buses: {
@@ -32,6 +41,12 @@ const ENTITIES = {
     title: 'Enfants', singular: 'enfant', endpoint: 'students',
     columns: [['first_name', 'Prénom'], ['last_name', 'Nom'], ['parent_id', 'Parent'], ['school_class', 'Classe'], ['active', 'Actif']],
     fields: [['parent_id', 'Parent', 'parent'], ['first_name', 'Prénom', 'text'], ['last_name', 'Nom', 'text'], ['school_class', 'Classe', 'text'], ['home_address', 'Adresse', 'text'], ['home_lat', 'Latitude', 'number'], ['home_lng', 'Longitude', 'number']]
+  },
+  routeStudents: {
+    title: 'Enfants par trajet', singular: 'affectation enfant', endpoint: 'route-students',
+    columns: [['route_id', 'Trajet'], ['student_id', 'Enfant'], ['stop_id', 'Arrêt']],
+    fields: [['route_id', 'Trajet', 'route'], ['student_id', 'Enfant', 'student'], ['stop_id', 'Arrêt de prise en charge', 'stop']],
+    removePath: row => `/route-students/${row.route_id}/${row.student_id}`
   },
   assignments: {
     title: 'Affectations', singular: 'affectation', endpoint: 'assignments',
@@ -149,7 +164,7 @@ function Login({ onLogin }) {
 function Dashboard({ data }) {
   const counts = [
     ['Trajets', data.routes?.length || 0], ['Bus', data.buses?.length || 0], ['Parents', data.users?.filter(x => x.role === 'PARENT').length || 0],
-    ['Enfants', data.students?.length || 0], ['Assistantes', data.users?.filter(x => x.role === 'ASSISTANT').length || 0], ['Affectations', data.assignments?.length || 0]
+    ['Enfants', data.students?.length || 0], ['Arrêts', data.stops?.length || 0], ['Assistantes', data.users?.filter(x => x.role === 'ASSISTANT').length || 0], ['Affectations', data.assignments?.length || 0]
   ];
   return <><div className="page-heading"><div><h2>Vue d’ensemble</h2><p>État actuel de l’établissement et des trajets.</p></div></div>
     <div className="metrics">{counts.map(([label, value]) => <article className="metric" key={label}><strong>{value}</strong><span>{label}</span></article>)}</div>
@@ -168,6 +183,8 @@ function Field({ definition, form, setForm, lists }) {
     : type === 'bus' ? lists.buses.map(x => [x.id, `${x.registration} — ${x.label}`])
     : type === 'driver' ? lists.users.filter(x => x.role === 'DRIVER').map(x => [x.id, `${x.first_name} ${x.last_name}`])
     : type === 'assistant' ? lists.users.filter(x => x.role === 'ASSISTANT').map(x => [x.id, `${x.first_name} ${x.last_name}`])
+    : type === 'student' ? lists.students.map(x => [x.id, `${x.first_name} ${x.last_name}`])
+    : type === 'stop' ? lists.stops.filter(x => !form.route_id || Number(x.route_id) === Number(form.route_id)).map(x => [x.id, `${x.stop_order}. ${x.name}`])
     : null;
   return <label>{label}
     {type === 'select' ? <select value={value} onChange={e => setForm({ ...form, [name]: e.target.value })}><option value="">Sélectionner</option>{values.map(option => <option key={option} value={option}>{option}</option>)}</select>
@@ -189,17 +206,17 @@ function EntityPanel({ entity, token, lists, refresh, onUnauthorized }) {
     event.preventDefault(); setBusy(true); setError('');
     try {
       const body = Object.fromEntries(Object.entries(form).filter(([, value]) => value !== ''));
-      ['capacity', 'home_lat', 'home_lng', 'parent_id', 'route_id', 'bus_id', 'driver_id', 'assistant_id'].forEach(key => { if (body[key] !== undefined) body[key] = Number(body[key]); });
+      ['capacity', 'home_lat', 'home_lng', 'parent_id', 'route_id', 'bus_id', 'driver_id', 'assistant_id', 'student_id', 'stop_id', 'stop_order', 'latitude', 'longitude', 'planned_offset_min'].forEach(key => { if (body[key] !== undefined) body[key] = Number(body[key]); });
       await api(`/${config.endpoint}`, { token, method: 'POST', body: JSON.stringify(body) }); setForm({}); await Promise.all([load(), refresh()]);
     } catch (err) { handleError(err); } finally { setBusy(false); }
   }
   async function remove(row) {
     if (!window.confirm(`Supprimer ${config.singular} sélectionné ?`)) return;
-    try { await api(`/${config.endpoint}/${row.id}`, { token, method: 'DELETE' }); await Promise.all([load(), refresh()]); } catch (err) { handleError(err); }
+    try { await api(config.removePath ? config.removePath(row) : `/${config.endpoint}/${row.id}`, { token, method: 'DELETE' }); await Promise.all([load(), refresh()]); } catch (err) { handleError(err); }
   }
   const display = (row, key) => {
     if (key === 'active') return row[key] ? 'Oui' : 'Non';
-    const maps = { route_id: lists.routes, bus_id: lists.buses, driver_id: lists.users, assistant_id: lists.users, parent_id: lists.users };
+    const maps = { route_id: lists.routes, bus_id: lists.buses, driver_id: lists.users, assistant_id: lists.users, parent_id: lists.users, student_id: lists.students, stop_id: lists.stops };
     if (maps[key]) { const item = maps[key].find(x => Number(x.id) === Number(row[key])); return item ? (item.name || item.label || `${item.first_name} ${item.last_name}`) : row[key]; }
     return row[key] ?? '—';
   };

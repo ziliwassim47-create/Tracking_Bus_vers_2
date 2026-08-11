@@ -71,14 +71,25 @@ La base est créée dans `data/tracking-bus.sqlite`. Pour la réinitialiser:
 npm.cmd run db:reset
 ```
 
+### Application mobile Expo
+
+```bat
+npm.cmd --prefix BusTrackerMobile-main install
+npm.cmd --prefix BusTrackerMobile-main run web
+```
+
+L’application utilise `http://localhost:9000` par défaut. Sur un téléphone
+physique, définir `EXPO_PUBLIC_SERVER_URL=http://IP_LOCALE_DU_PC:9000` avant de
+lancer Expo.
+
 ## Comptes de démonstration
 
-| Rôle | Email | Mot de passe |
-|---|---|---|
-| Parent | `parent@demo.tn` | `demo1234` |
-| Assistante | `assistant@demo.tn` | `demo1234` |
-| Chauffeur | `chauffeur@demo.tn` | `demo1234` |
-| Administration | `admin@demo.tn` | `demo1234` |
+| Rôle | Téléphone | Email | Mot de passe |
+|---|---|---|---|
+| Parent | `20200200` | `parent@demo.tn` | `demo1234` |
+| Assistante | `20400400` | `assistant@demo.tn` | `demo1234` |
+| Chauffeur | `20300300` | `chauffeur@demo.tn` | `demo1234` |
+| Administration | `20100100` | `admin@demo.tn` | `demo1234` |
 
 Les nouveaux comptes validés par l'administration reçoivent aussi
 `demo1234` comme mot de passe temporaire dans cette version de démonstration.

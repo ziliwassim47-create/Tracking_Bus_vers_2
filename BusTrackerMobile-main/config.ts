@@ -1,6 +1,6 @@
 // Server Configuration
-// Backend server URL - same for both development and production
-const SERVER_URL = 'http://localhost:4321';
+// Sur un téléphone physique, définir EXPO_PUBLIC_SERVER_URL avec l'IP locale du PC.
+const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL || 'http://localhost:9000';
 export const API_BASE_URL = `${SERVER_URL}/api`;
 export const GOMAPS_API_KEY = process.env.EXPO_PUBLIC_GOMAPS_API_KEY || '';
 

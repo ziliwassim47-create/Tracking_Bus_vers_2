@@ -97,6 +97,25 @@ function findActiveUserById(id) {
   return db.prepare(`SELECT ${UTILISATEUR_API_COLUMNS} FROM Utilisateur WHERE id = ? AND actif = 1`).get(id) || null;
 }
 
+function normalizePhone(value) {
+  let digits = String(value || '').replace(/\D/g, '');
+  if (digits.startsWith('00216')) digits = digits.slice(5);
+  else if (digits.startsWith('216') && digits.length > 8) digits = digits.slice(3);
+  return digits;
+}
+
+function findActiveUserForLogin(identifier) {
+  const login = String(identifier || '').trim();
+  if (!login) return null;
+  const byEmail = db.prepare(`SELECT ${UTILISATEUR_API_COLUMNS}
+    FROM Utilisateur WHERE email = ? COLLATE NOCASE AND actif = 1`).get(login);
+  if (byEmail) return byEmail;
+  const normalized = normalizePhone(login);
+  if (!normalized) return null;
+  return all(`SELECT ${UTILISATEUR_API_COLUMNS} FROM Utilisateur
+    WHERE telephone IS NOT NULL AND actif = 1`).find(candidate => normalizePhone(candidate.phone) === normalized) || null;
+}
+
 function revokeSession(session) {
   if (!session) return;
   sessions.delete(session.accessTokenHash);
@@ -412,6 +431,52 @@ function validateFields(data, required) {
   return required.filter(field => data[field] === undefined || data[field] === null || data[field] === '');
 }
 
+function validateEntityRelations(entity, data) {
+  if (entity === 'users' && !['ADMIN', 'PARENT', 'DRIVER', 'ASSISTANT'].includes(data.role)) {
+    return 'Rôle utilisateur invalide';
+  }
+  if (entity === 'students') {
+    const parent = db.prepare("SELECT id FROM Utilisateur WHERE id = ? AND typeCompte = 'PARENT' AND actif = 1").get(data.parent_id);
+    if (!parent) return 'Le parent sélectionné est introuvable ou inactif';
+  }
+  if (entity === 'stops') {
+    const route = db.prepare('SELECT id FROM Trajet WHERE id = ? AND actif = 1').get(data.route_id);
+    if (!route) return 'Le trajet sélectionné est introuvable ou inactif';
+  }
+  if (entity === 'assignments') {
+    const route = db.prepare('SELECT id FROM Trajet WHERE id = ? AND actif = 1').get(data.route_id);
+    const bus = db.prepare("SELECT id FROM Bus WHERE id = ? AND statut != 'INACTIVE'").get(data.bus_id);
+    const driver = db.prepare("SELECT id FROM Utilisateur WHERE id = ? AND typeCompte = 'DRIVER' AND actif = 1").get(data.driver_id);
+    const assistant = data.assistant_id
+      ? db.prepare("SELECT id FROM Utilisateur WHERE id = ? AND typeCompte = 'ASSISTANT' AND actif = 1").get(data.assistant_id)
+      : true;
+    if (!route) return 'Le trajet sélectionné est introuvable ou inactif';
+    if (!bus) return 'Le bus sélectionné est introuvable ou inactif';
+    if (!driver) return 'Le chauffeur sélectionné est introuvable ou possède un rôle invalide';
+    if (!assistant) return "L’assistante sélectionnée est introuvable ou possède un rôle invalide";
+  }
+  return null;
+}
+
+function validateRouteStops(stops) {
+  const orders = new Set();
+  for (let index = 0; index < stops.length; index += 1) {
+    const stop = stops[index];
+    if (!String(stop.name || '').trim() || !String(stop.address || '').trim()) {
+      return `Nom et adresse requis pour l’arrêt ${index + 1}`;
+    }
+    if (!Number.isFinite(Number(stop.latitude)) || !Number.isFinite(Number(stop.longitude))) {
+      return `Coordonnées invalides pour l’arrêt ${index + 1}`;
+    }
+    const order = Number(stop.stop_order);
+    if (!Number.isInteger(order) || order < 0 || orders.has(order)) {
+      return `Ordre invalide ou dupliqué pour l’arrêt ${index + 1}`;
+    }
+    orders.add(order);
+  }
+  return null;
+}
+
 function parseStopsPayload(payload) {
   const rawStops = payload && payload.stops;
   if (rawStops === undefined || rawStops === null || rawStops === '') return [];
@@ -539,10 +604,9 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'POST' && pathname === '/api/auth/login') {
     const body = await readBody(req);
-    const user = db.prepare(`SELECT ${UTILISATEUR_API_COLUMNS}
-      FROM Utilisateur WHERE email = ? COLLATE NOCASE AND actif = 1`).get(String(body.email || '').trim());
+    const user = findActiveUserForLogin(body.phone || body.email || body.login);
     if (!user || !verifyPassword(String(body.password || ''), user.password_hash)) {
-      return json(res, 401, { error: 'Email ou mot de passe incorrect' });
+      return json(res, 401, { error: 'Téléphone/e-mail ou mot de passe incorrect' });
     }
     return json(res, 200, { ...issueSession(user.id), user: publicUser(user) });
   }
@@ -761,8 +825,10 @@ async function handleApi(req, res, url) {
     const route = db.prepare('SELECT id FROM Trajet WHERE id = ?').get(routeId);
     const student = db.prepare('SELECT id FROM Enfant WHERE id = ? AND actif = 1').get(studentId);
     if (!route || !student) return json(res, 404, { error: 'Route ou élève introuvable' });
+    const requestedStop = stopId ? db.prepare('SELECT id FROM Arret WHERE id = ? AND idTrajet = ?').get(stopId, routeId) : null;
+    if (stopId && !requestedStop) return json(res, 422, { error: 'L’arrêt sélectionné n’appartient pas à ce trajet' });
     const fallbackStop = db.prepare('SELECT id FROM Arret WHERE idTrajet = ? ORDER BY ordreArret, id LIMIT 1').get(routeId);
-    const resolvedStopId = stopId || fallbackStop?.id || null;
+    const resolvedStopId = requestedStop?.id || fallbackStop?.id || null;
     if (!resolvedStopId) return json(res, 422, { error: 'Aucun arrêt disponible pour cette ligne' });
     const existing = db.prepare('SELECT idTrajet, idEnfant FROM TrajetEnfant WHERE idTrajet = ? AND idEnfant = ?').get(routeId, studentId);
     if (existing) {
@@ -771,6 +837,22 @@ async function handleApi(req, res, url) {
     }
     const result = db.prepare('INSERT INTO TrajetEnfant(idTrajet, idEnfant, idArret, actif, affecteLe) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)').run(routeId, studentId, resolvedStopId);
     return json(res, 201, { id: Number(result.lastInsertRowid) });
+  }
+
+  if (req.method === 'GET' && pathname === '/api/route-students') {
+    if (!requireRole(res, user, ['ADMIN'])) return;
+    return json(res, 200, all(`SELECT te.idTrajet AS route_id, te.idEnfant AS student_id,
+      te.idArret AS stop_id, te.actif AS active, te.affecteLe AS assigned_at
+      FROM TrajetEnfant te WHERE te.actif = 1 ORDER BY te.idTrajet, te.idEnfant`));
+  }
+
+  const routeStudentDeleteMatch = pathname.match(/^\/api\/route-students\/(\d+)\/(\d+)$/);
+  if (req.method === 'DELETE' && routeStudentDeleteMatch) {
+    if (!requireRole(res, user, ['ADMIN'])) return;
+    const result = db.prepare('UPDATE TrajetEnfant SET actif = 0 WHERE idTrajet = ? AND idEnfant = ?')
+      .run(routeStudentDeleteMatch[1], routeStudentDeleteMatch[2]);
+    if (!result.changes) return json(res, 404, { error: 'Affectation enfant introuvable' });
+    return json(res, 200, { ok: true });
   }
 
   const entityMatch = pathname.match(/^\/api\/(users|students|buses|routes|stops|assignments)(?:\/(\d+))?$/);
@@ -794,6 +876,21 @@ async function handleApi(req, res, url) {
       delete insertPayload.stops;
       const missing = validateFields(insertPayload, config.required);
       if (missing.length) return json(res, 422, { error: `Champs requis: ${missing.join(', ')}` });
+      if (entity === 'users') {
+        insertPayload.email = String(insertPayload.email).trim();
+        const emailExists = db.prepare('SELECT id FROM Utilisateur WHERE email = ? COLLATE NOCASE').get(insertPayload.email);
+        const normalizedPhone = normalizePhone(insertPayload.phone);
+        const phoneExists = normalizedPhone && all('SELECT id, telephone AS phone FROM Utilisateur WHERE telephone IS NOT NULL')
+          .some(candidate => normalizePhone(candidate.phone) === normalizedPhone);
+        if (emailExists) return json(res, 409, { error: 'Cette adresse e-mail est déjà utilisée' });
+        if (phoneExists) return json(res, 409, { error: 'Ce numéro de téléphone est déjà utilisé' });
+      }
+      const relationError = validateEntityRelations(entity, insertPayload);
+      if (relationError) return json(res, 422, { error: relationError });
+      if (entity === 'routes') {
+        const stopsError = validateRouteStops(stops);
+        if (stopsError) return json(res, 422, { error: stopsError });
+      }
       const fields = [...config.fields];
       if (entity === 'users') fields.push('password_hash');
       const used = fields.filter(field => insertPayload[field] !== undefined);
