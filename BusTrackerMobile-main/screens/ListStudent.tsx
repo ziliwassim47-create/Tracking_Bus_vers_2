@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Cell, Table, TableWrapper } from 'react-native-table-component';
+import { Cell, TableWrapper } from 'react-native-table-component';
 import type { AssistantStackParamList } from '../App';
 import { platformShadow, platformTextShadow } from '../styles/platformStyles';
 import { authenticatedRequest } from '../utils/session';
@@ -184,7 +184,6 @@ export default function ListStudent({ navigation }: Readonly<Props>) {
         </View>
 
         {assignedStudents.length ? <View style={styles.tableContainer}>
-          <Table borderStyle={styles.tableBorder}>
             <TableWrapper style={styles.tableHeaderRow}>
               <Cell data="Nom et prénom" flex={2.2} style={styles.tableHeaderCell} textStyle={styles.tableHeaderText} />
               <Cell data="Classe" flex={1} style={styles.tableHeaderCell} textStyle={styles.tableHeaderText} />
@@ -198,13 +197,12 @@ export default function ListStudent({ navigation }: Readonly<Props>) {
                 style={[styles.presenceButton, isPresent && styles.presenceButtonActive]}
                 onPress={() => setPresence(current => ({ ...current, [student.id]: !current[student.id] }))}
               ><Text style={[styles.presenceText, isPresent && styles.presenceTextActive]}>{isPresent ? '✓' : '✕'}</Text></TouchableOpacity>;
-              return <TableWrapper key={student.id} style={[styles.tableRow, index % 2 === 0 && styles.tableRowEven]}>
+              return <TableWrapper key={student.id} style={StyleSheet.flatten([styles.tableRow, index % 2 === 0 && styles.tableRowEven])}>
                 <Cell data={`${student.first_name} ${student.last_name}`} flex={2.2} style={styles.tableCell} textStyle={styles.tableNameText} />
                 <Cell data={student.school_class || '—'} flex={1} style={styles.tableCell} textStyle={styles.tableCellText} />
                 <Cell data={control} flex={1.25} style={styles.tableCell} />
               </TableWrapper>;
             })}
-          </Table>
         </View> : <View style={styles.emptyCard}><Text style={styles.emptyIcon}>📋</Text><Text style={styles.emptyText}>Aucun enfant affecté au Bus {selectedBus} pour cette assistante.</Text></View>}
 
         <TouchableOpacity
@@ -245,7 +243,6 @@ const styles = StyleSheet.create({
   countBadge:{minWidth:32,height:32,paddingHorizontal:8,alignItems:'center',justifyContent:'center',borderRadius:16,backgroundColor:'#ccfbf1'},
   countText:{color:'#0f766e',fontWeight:'900'},
   tableContainer:{overflow:'hidden',borderRadius:16,backgroundColor:'#fff',borderWidth:1.5,borderColor:'#e5e7eb',...platformShadow('#000',3,.08,10,4)},
-  tableBorder:{borderWidth:0},
   tableHeaderRow:{minHeight:52,flexDirection:'row',backgroundColor:'#14b8a6'},
   tableHeaderCell:{minHeight:52,paddingHorizontal:7,alignItems:'center',justifyContent:'center',borderRightWidth:1,borderRightColor:'#0d9488'},
   tableHeaderText:{color:'#fff',fontSize:11,fontWeight:'900',textAlign:'center'},
